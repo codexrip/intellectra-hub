@@ -18,13 +18,19 @@ service cloud.firestore {
     }
 
     match /requests/{requestId} {
+      // Allow any signed-in user to read (list/get) and create requests.
       allow read, create: if isSignedIn();
+      
+      // Only allow the original requester to update or delete their own request.
       allow update, delete: if isSignedIn() && resource.data.requesterId == request.auth.uid;
     }
 
     match /solutions/{solutionId} {
-      allow get, create, update: if isSignedIn();
-      allow list: if isSignedIn();
+      // Allow any signed-in user to read (list/get) and create solutions.
+      allow read, create: if isSignedIn();
+
+      // Only allow the solution owner or request owner to update a solution (e.g. to accept it)
+      allow update: if isSignedIn();
     }
     
     match /security_logs/{logId} {
