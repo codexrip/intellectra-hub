@@ -30,12 +30,11 @@ import {
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/hooks/useAuth';
+import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { collection, addDoc, doc, runTransaction, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { Request, RequestType, Urgency } from '@/lib/types';
+import { Request, RequestType, Urgency, UserProfile } from '@/lib/types';
 import { URGENCY_COST, TYPE_COST } from '@/lib/constants';
 import { Coins, Loader2 } from 'lucide-react';
 
@@ -50,10 +49,18 @@ const formSchema = z.object({
 });
 
 export default function NewRequestPage() {
-  const { user, profile } = useAuth();
+  const { user } = useUser();
+  const firestore = useFirestore();
   const { toast } = useToast();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+
+  const userProfileRef = useMemoFirebase(() => {
+    if (!user) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [firestore, user]);
+
+  const { data: profile } = useDoc<UserProfile>(userProfileRef);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -86,8 +93,8 @@ export default function NewRequestPage() {
     setLoading(true);
 
     try {
-        await runTransaction(db, async (transaction) => {
-            const userDocRef = doc(db, 'users', user.uid);
+        await runTransaction(firestore, async (transaction) => {
+            const userDocRef = doc(firestore, 'users', user.uid);
             
             const userDoc = await transaction.get(userDocRef);
             if (!userDoc.exists() || userDoc.data().walletBalance < totalCost) {
@@ -98,7 +105,7 @@ export default function NewRequestPage() {
                 walletBalance: userDoc.data().walletBalance - totalCost
             });
             
-            const newRequestRef = doc(collection(db, 'requests'));
+            const newRequestRef = doc(collection(firestore, 'requests'));
             const newRequest: Omit<Request, 'id'> = {
                 requesterId: user.uid,
                 ...values,
@@ -179,7 +186,7 @@ export default function NewRequestPage() {
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select a request type" />
-                            </SelectTrigger>
+                            </Trigger>
                           </FormControl>
                           <SelectContent>
                             {requestTypes.map(type => (
@@ -201,7 +208,7 @@ export default function NewRequestPage() {
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select an urgency level" />
-                            </SelectTrigger>
+                            </Trigger>
                           </FormControl>
                           <SelectContent>
                             {urgencies.map(urgency => (

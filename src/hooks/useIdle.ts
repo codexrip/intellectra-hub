@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { signOut } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { useAuth } from '@/firebase';
 import { IDLE_TIMEOUT } from '@/lib/constants';
 import { useToast } from './use-toast';
 
 export function useIdle() {
   const [isIdle, setIsIdle] = useState(false);
   const { toast } = useToast();
+  const auth = useAuth();
 
   const handleIdle = useCallback(() => {
     setIsIdle(true);
@@ -20,7 +21,7 @@ export function useIdle() {
     signOut(auth).catch(error => {
       console.error("Error signing out:", error);
     });
-  }, [toast]);
+  }, [toast, auth]);
 
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;

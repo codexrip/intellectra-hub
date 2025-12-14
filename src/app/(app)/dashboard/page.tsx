@@ -2,12 +2,32 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useAuth } from "@/hooks/useAuth";
+import { useUser, useFirestore, useMemoFirebase } from "@/firebase";
+import { doc } from "firebase/firestore";
+import { useDoc } from "@/firebase";
+import { UserProfile } from "@/lib/types";
 import { ArrowRight, PlusCircle, Store } from "lucide-react";
 import Link from "next/link";
+import { Loader2 } from "lucide-react";
 
 export default function DashboardPage() {
-    const { profile } = useAuth();
+    const { user } = useUser();
+    const firestore = useFirestore();
+
+    const userProfileRef = useMemoFirebase(() => {
+        if (!user) return null;
+        return doc(firestore, 'users', user.uid);
+    }, [firestore, user]);
+
+    const { data: profile, isLoading } = useDoc<UserProfile>(userProfileRef);
+
+    if (isLoading || !profile) {
+        return (
+            <div className="flex h-full w-full items-center justify-center">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            </div>
+        );
+    }
 
     return (
         <div className="container mx-auto p-0">

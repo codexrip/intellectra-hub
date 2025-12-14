@@ -1,8 +1,8 @@
 "use client";
 
-import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
-import { db } from '@/lib/firebase';
+import { collection, query, where, orderBy } from 'firebase/firestore';
+import { useState } from 'react';
+import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { Request, RequestType } from '@/lib/types';
 import { RequestCard } from '@/components/requests/RequestCard';
 import { Loader2 } from 'lucide-react';
@@ -11,44 +11,28 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 const requestTypes: RequestType[] = ['Project Material', 'Collaboration', 'Teaching Material', 'Others'];
 
 export default function MarketplacePage() {
-    const [requests, setRequests] = useState<Request[]>([]);
-    const [loading, setLoading] = useState(true);
+    const firestore = useFirestore();
     const [filter, setFilter] = useState<RequestType | 'All'>('All');
 
-    useEffect(() => {
-        setLoading(true);
-        const requestsRef = collection(db, 'requests');
-        let q;
-
+    const requestsQuery = useMemoFirebase(() => {
+        const requestsRef = collection(firestore, 'requests');
         if (filter === 'All') {
-            q = query(
+            return query(
                 requestsRef,
                 where('status', '==', 'Open'),
                 orderBy('createdAt', 'desc')
             );
         } else {
-            q = query(
+            return query(
                 requestsRef,
                 where('status', '==', 'Open'),
                 where('type', '==', filter),
                 orderBy('createdAt', 'desc')
             );
         }
+    }, [firestore, filter]);
 
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
-            const openRequests: Request[] = [];
-            querySnapshot.forEach((doc) => {
-                openRequests.push({ id: doc.id, ...doc.data() } as Request);
-            });
-            setRequests(openRequests);
-            setLoading(false);
-        }, (error) => {
-            console.error("Error fetching requests:", error);
-            setLoading(false);
-        });
-
-        return () => unsubscribe();
-    }, [filter]);
+    const { data: requests, isLoading } = useCollection<Request>(requestsQuery);
 
     return (
         <div className="container mx-auto p-0">
@@ -70,18 +54,18 @@ export default function MarketplacePage() {
                 </div>
             </div>
 
-            {loading ? (
+            {isLoading ? (
                 <div className="flex justify-center items-center h-64">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
-            ) : requests.length === 0 ? (
+            ) : requests && requests.length === 0 ? (
                 <div className="text-center py-16 border-2 border-dashed rounded-lg">
                     <h2 className="text-xl font-semibold">No Open Requests</h2>
                     <p className="text-muted-foreground mt-2">Check back later or try a different filter.</p>
                 </div>
             ) : (
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {requests.map((request) => (
+                    {requests?.map((request) => (
                         <RequestCard key={request.id} request={request} />
                     ))}
                 </div>

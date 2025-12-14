@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuth } from "@/hooks/useAuth";
+import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,11 +12,12 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { useAuth } from "@/firebase";
 import Link from "next/link";
 import { Coins, BarChart, LogOut, User as UserIcon } from "lucide-react";
-import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { doc } from "firebase/firestore";
+import { UserProfile } from "@/lib/types";
 
 const AnimatedNumber = ({ value }: { value: number }) => {
     const [currentValue, setCurrentValue] = useState(value);
@@ -32,8 +33,16 @@ const AnimatedNumber = ({ value }: { value: number }) => {
 };
 
 export function Header() {
-  const { profile, user } = useAuth();
-  const pathname = usePathname();
+  const { user } = useUser();
+  const auth = useAuth();
+  const firestore = useFirestore();
+
+  const userProfileRef = useMemoFirebase(() => {
+    if (!user) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [firestore, user]);
+
+  const { data: profile } = useDoc<UserProfile>(userProfileRef);
 
   const handleLogout = async () => {
     await signOut(auth);

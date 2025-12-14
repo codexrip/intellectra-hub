@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth, db } from "@/lib/firebase";
+import { useAuth, useFirestore } from "@/firebase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { doc, setDoc } from "firebase/firestore";
@@ -24,6 +24,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { UserProfile } from "@/lib/types";
+import { initiateEmailSignUp } from "@/firebase";
 
 const formSchema = z.object({
   displayName: z.string().min(2, { message: "Display name must be at least 2 characters." }),
@@ -35,6 +36,8 @@ export function RegisterForm() {
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const auth = useAuth();
+  const firestore = useFirestore();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -64,7 +67,7 @@ export function RegisterForm() {
         frozenUntil: null,
       };
 
-      await setDoc(doc(db, "users", user.uid), newUserProfile);
+      await setDoc(doc(firestore, "users", user.uid), newUserProfile);
       
       router.push("/dashboard");
     } catch (error: any) {

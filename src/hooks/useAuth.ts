@@ -1,12 +1,19 @@
 "use client";
 
-import { useContext } from 'react';
-import { AuthContext } from '@/context/AuthContext';
+import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
+import { doc } from 'firebase/firestore';
+import { UserProfile } from "@/lib/types";
 
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+    const { user, isUserLoading: loading } = useUser();
+    const firestore = useFirestore();
+
+    const userProfileRef = useMemoFirebase(() => {
+        if (!user) return null;
+        return doc(firestore, 'users', user.uid);
+    }, [firestore, user]);
+
+    const { data: profile } = useDoc<UserProfile>(userProfileRef);
+
+    return { user, profile, loading };
 };

@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth, db } from "@/lib/firebase";
+import { useAuth, useFirestore, initiateEmailSignIn } from "@/firebase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -46,6 +46,8 @@ export function LoginForm() {
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const auth = useAuth();
+  const firestore = useFirestore();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -56,7 +58,7 @@ export function LoginForm() {
   });
 
   const checkAccountFreeze = async (email: string): Promise<string | null> => {
-    const securityLogsRef = collection(db, 'security_logs');
+    const securityLogsRef = collection(firestore, 'security_logs');
     const q = query(securityLogsRef, where('email', '==', email));
     const querySnapshot = await getDocs(q);
     
@@ -83,7 +85,7 @@ export function LoginForm() {
   }
 
   const handleFailedLogin = async (email: string) => {
-    const securityLogsRef = collection(db, 'security_logs');
+    const securityLogsRef = collection(firestore, 'security_logs');
     const q = query(securityLogsRef, where('email', '==', email));
     const querySnapshot = await getDocs(q);
 
@@ -94,7 +96,7 @@ export function LoginForm() {
             lastAttemptTime: serverTimestamp()
         });
     } else {
-        const logDocRef = doc(db, 'security_logs', querySnapshot.docs[0].id);
+        const logDocRef = doc(firestore, 'security_logs', querySnapshot.docs[0].id);
         await updateDoc(logDocRef, {
             failedAttempts: increment(1),
             lastAttemptTime: serverTimestamp()

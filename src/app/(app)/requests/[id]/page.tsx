@@ -16,8 +16,7 @@ import {
   increment,
   addDoc
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { useAuth } from '@/hooks/useAuth';
+import { useUser, useFirestore, useDoc, useCollection, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Request, Solution, UserProfile } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -79,17 +78,18 @@ function FeedbackModal({ open, onOpenChange, onSubmit, solverName }: { open: boo
 }
 
 function SolutionForm({ requestId }: { requestId: string }) {
-    const { user, profile } = useAuth();
+    const { user } = useUser();
+    const firestore = useFirestore();
     const { toast } = useToast();
     const [content, setContent] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user || !profile || !content.trim()) return;
+        if (!user || !content.trim()) return;
         setLoading(true);
         try {
-            await addDoc(collection(db, 'solutions'), {
+            addDocumentNonBlocking(collection(firestore, 'solutions'), {
                 requestId,
                 solverId: user.uid,
                 content,
@@ -130,56 +130,63 @@ function SolutionForm({ requestId }: { requestId: string }) {
 
 export default function RequestDetailPage() {
     const { id } = useParams();
-    const { user } = useAuth();
+    const { user } = useUser();
+    const firestore = useFirestore();
     const { toast } = useToast();
     const router = useRouter();
-    const [request, setRequest] = useState<Request | null>(null);
-    const [solutions, setSolutions] = useState<Solution[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-    const [solutionToRate, setSolutionToRate] = useState<Solution | null>(null);
 
     const requestId = Array.isArray(id) ? id[0] : id;
 
+    const requestDocRef = useMemoFirebase(() => {
+        if (!requestId) return null;
+        return doc(firestore, 'requests', requestId);
+    }, [firestore, requestId]);
+    
+    const {data: request, isLoading: isRequestLoading } = useDoc<Request>(requestDocRef);
+
+    const solutionsQuery = useMemoFirebase(() => {
+        if (!requestId) return null;
+        return query(collection(firestore, 'solutions'), where('requestId', '==', requestId), orderBy('createdAt', 'desc'));
+    }, [firestore, requestId]);
+
+    const { data: solutions, isLoading: areSolutionsLoading } = useCollection<Solution>(solutionsQuery);
+    
+    const [hydratedSolutions, setHydratedSolutions] = useState<Solution[]>([]);
+    const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+    const [solutionToRate, setSolutionToRate] = useState<Solution | null>(null);
+
     useEffect(() => {
-        if (!requestId) return;
+        if (request === null && !isRequestLoading) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Request not found.' });
+            router.push('/marketplace');
+        }
+    }, [request, isRequestLoading, router, toast]);
 
-        const requestDocRef = doc(db, 'requests', requestId);
-        const unsubscribeRequest = onSnapshot(requestDocRef, (doc) => {
-            if (doc.exists()) {
-                setRequest({ id: doc.id, ...doc.data() } as Request);
-            } else {
-                toast({ variant: 'destructive', title: 'Error', description: 'Request not found.' });
-                router.push('/marketplace');
-            }
-            setLoading(false);
-        });
-
-        const solutionsQuery = query(collection(db, 'solutions'), where('requestId', '==', requestId), orderBy('createdAt', 'desc'));
-        const unsubscribeSolutions = onSnapshot(solutionsQuery, async (snapshot) => {
-            const solutionsData: Solution[] = [];
-            for (const docSnap of snapshot.docs) {
-                const solution = { id: docSnap.id, ...docSnap.data() } as Solution;
-                const solverDoc = await getDoc(doc(db, 'users', solution.solverId));
-                if(solverDoc.exists()){
-                    const solverProfile = solverDoc.data() as UserProfile;
-                    solution.solver = {
-                        displayName: solverProfile.displayName,
-                        photoURL: solverProfile.photoURL,
+    useEffect(() => {
+        if (solutions) {
+            const fetchSolvers = async () => {
+                const hydrated = await Promise.all(solutions.map(async (solution) => {
+                    const solverDoc = await getDoc(doc(firestore, 'users', solution.solverId));
+                    if(solverDoc.exists()){
+                        const solverProfile = solverDoc.data() as UserProfile;
+                        return {
+                            ...solution,
+                            solver: {
+                                displayName: solverProfile.displayName,
+                                photoURL: solverProfile.photoURL,
+                            }
+                        }
                     }
-                }
-                solutionsData.push(solution);
-            }
-            setSolutions(solutionsData);
-        });
-
-        return () => {
-            unsubscribeRequest();
-            unsubscribeSolutions();
-        };
-    }, [requestId, router, toast]);
+                    return solution;
+                }));
+                setHydratedSolutions(hydrated);
+            };
+            fetchSolvers();
+        }
+    }, [solutions, firestore]);
 
     const isOwner = user?.uid === request?.requesterId;
+    const isLoading = isRequestLoading || areSolutionsLoading;
 
     const handleMarkAsCompleted = async (solution: Solution) => {
         setSolutionToRate(solution);
@@ -192,10 +199,10 @@ export default function RequestDetailPage() {
         setShowFeedbackModal(false);
 
         try {
-            await runTransaction(db, async (transaction) => {
-                const requestRef = doc(db, 'requests', request.id);
-                const solverRef = doc(db, 'users', solutionToRate.solverId);
-                const solutionRef = doc(db, 'solutions', solutionToRate.id);
+            await runTransaction(firestore, async (transaction) => {
+                const requestRef = doc(firestore, 'requests', request.id);
+                const solverRef = doc(firestore, 'users', solutionToRate.solverId);
+                const solutionRef = doc(firestore, 'solutions', solutionToRate.id);
                 
                 const solverDoc = await transaction.get(solverRef);
                 if (!solverDoc.exists()) throw new Error("Solver not found");
@@ -229,9 +236,9 @@ export default function RequestDetailPage() {
     };
     
     const handleDeleteRequest = async () => {
-        if (!request) return;
+        if (!request || !requestDocRef) return;
         try {
-            await deleteDoc(doc(db, 'requests', request.id));
+            deleteDocumentNonBlocking(requestDocRef);
             toast({ title: 'Request Deleted', description: 'Your request has been removed.' });
             router.push('/my-requests');
         } catch (error) {
@@ -239,7 +246,7 @@ export default function RequestDetailPage() {
         }
     };
 
-    if (loading) return <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+    if (isLoading) return <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
     if (!request) return null;
 
     const rewardAmount = Math.round(request.cost * REWARD_PERCENTAGE);
@@ -281,7 +288,7 @@ export default function RequestDetailPage() {
                 </CardContent>
                 {isOwner && request.status === 'Open' && (
                     <CardFooter className="flex gap-2">
-                        {solutions.length === 0 && (
+                        {(!solutions || solutions.length === 0) && (
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                     <Button variant="destructive"><Trash2 className="mr-2 h-4 w-4"/>Delete Request</Button>
@@ -301,9 +308,9 @@ export default function RequestDetailPage() {
             </Card>
 
             <div className="space-y-6">
-                <h2 className="text-2xl font-bold font-headline">Solutions ({solutions.length})</h2>
-                {solutions.length > 0 ? (
-                    solutions.map(solution => (
+                <h2 className="text-2xl font-bold font-headline">Solutions ({hydratedSolutions.length})</h2>
+                {hydratedSolutions.length > 0 ? (
+                    hydratedSolutions.map(solution => (
                         <Card key={solution.id} className={solution.isAccepted ? "border-primary bg-primary/5" : ""}>
                             <CardHeader className="flex flex-row justify-between items-start">
                                 <div className="flex items-center gap-3">
@@ -333,7 +340,7 @@ export default function RequestDetailPage() {
                 )}
             </div>
 
-            {!isOwner && request.status === 'Open' && !solutions.some(s => s.solverId === user?.uid) && (
+            {!isOwner && request.status === 'Open' && !solutions?.some(s => s.solverId === user?.uid) && (
                 <SolutionForm requestId={requestId} />
             )}
         </div>

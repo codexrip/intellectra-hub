@@ -1,9 +1,7 @@
 "use client";
 
-import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
-import { db } from '@/lib/firebase';
-import { useAuth } from '@/hooks/useAuth';
+import { collection, query, where, orderBy } from 'firebase/firestore';
+import { useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
 import { Request } from '@/lib/types';
 import { RequestCard } from '@/components/requests/RequestCard';
 import { Loader2 } from 'lucide-react';
@@ -12,37 +10,22 @@ import Link from 'next/link';
 import { PlusCircle } from 'lucide-react';
 
 export default function MyRequestsPage() {
-    const { user } = useAuth();
-    const [requests, setRequests] = useState<Request[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { user } = useUser();
+    const firestore = useFirestore();
 
-    useEffect(() => {
-        if (!user) return;
-
-        setLoading(true);
-        const requestsRef = collection(db, 'requests');
-        const q = query(
+    const userRequestsQuery = useMemoFirebase(() => {
+        if (!user) return null;
+        const requestsRef = collection(firestore, 'requests');
+        return query(
             requestsRef,
             where('requesterId', '==', user.uid),
             orderBy('createdAt', 'desc')
         );
+    }, [firestore, user]);
 
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
-            const userRequests: Request[] = [];
-            querySnapshot.forEach((doc) => {
-                userRequests.push({ id: doc.id, ...doc.data() } as Request);
-            });
-            setRequests(userRequests);
-            setLoading(false);
-        }, (error) => {
-            console.error("Error fetching user requests:", error);
-            setLoading(false);
-        });
+    const { data: requests, isLoading } = useCollection<Request>(userRequestsQuery);
 
-        return () => unsubscribe();
-    }, [user]);
-
-    if (loading) {
+    if (isLoading) {
         return (
             <div className="flex justify-center items-center h-full">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -62,14 +45,14 @@ export default function MyRequestsPage() {
                 </Button>
             </div>
             
-            {requests.length === 0 ? (
+            {requests && requests.length === 0 ? (
                 <div className="text-center py-16 border-2 border-dashed rounded-lg">
                     <h2 className="text-xl font-semibold">No Requests Found</h2>
                     <p className="text-muted-foreground mt-2">You haven't created any requests yet.</p>
                 </div>
             ) : (
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {requests.map((request) => (
+                    {requests?.map((request) => (
                         <RequestCard key={request.id} request={request} />
                     ))}
                 </div>

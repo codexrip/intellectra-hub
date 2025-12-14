@@ -3,22 +3,31 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
-import { db } from "@/lib/firebase";
+import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
 import { doc, updateDoc, increment } from "firebase/firestore";
 import { Coins, PlusCircle, MinusCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { UserProfile } from "@/lib/types";
 
 export default function WalletPage() {
-    const { profile, user } = useAuth();
+    const { user } = useUser();
+    const firestore = useFirestore();
     const { toast } = useToast();
     const [loading, setLoading] = useState<"buy" | "withdraw" | null>(null);
+
+    const userProfileRef = useMemoFirebase(() => {
+        if (!user) return null;
+        return doc(firestore, 'users', user.uid);
+    }, [firestore, user]);
+    
+    const { data: profile } = useDoc<UserProfile>(userProfileRef);
+
 
     const handleBuyTokens = async () => {
         if (!user) return;
         setLoading("buy");
         try {
-            const userDocRef = doc(db, 'users', user.uid);
+            const userDocRef = doc(firestore, 'users', user.uid);
             await updateDoc(userDocRef, {
                 walletBalance: increment(100)
             });
@@ -53,7 +62,7 @@ export default function WalletPage() {
         }
 
         try {
-            const userDocRef = doc(db, 'users', user.uid);
+            const userDocRef = doc(firestore, 'users', user.uid);
             await updateDoc(userDocRef, {
                 walletBalance: increment(-amountToWithdraw)
             });
@@ -71,6 +80,14 @@ export default function WalletPage() {
         } finally {
             setLoading(null);
         }
+    }
+
+    if (!profile) {
+        return (
+            <div className="flex h-full w-full items-center justify-center">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            </div>
+        );
     }
 
     return (

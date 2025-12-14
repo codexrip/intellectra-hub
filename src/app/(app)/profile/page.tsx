@@ -1,33 +1,49 @@
 "use client";
 
-import { useAuth } from "@/hooks/useAuth";
+import { useUser, useFirestore, useDoc, useMemoFirebase, updateDocumentNonBlocking } from "@/firebase";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { db } from "@/lib/firebase";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc } from "firebase/firestore";
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
+import { UserProfile } from "@/lib/types";
+
 
 export default function ProfilePage() {
-    const { profile, user } = useAuth();
+    const { user } = useUser();
+    const firestore = useFirestore();
     const { toast } = useToast();
-    const [displayName, setDisplayName] = useState(profile?.displayName || "");
-    const [photoURL, setPhotoURL] = useState(profile?.photoURL || "");
+    
+    const userProfileRef = useMemoFirebase(() => {
+      if (!user) return null;
+      return doc(firestore, 'users', user.uid);
+    }, [firestore, user]);
+
+    const { data: profile, isLoading: isProfileLoading } = useDoc<UserProfile>(userProfileRef);
+
+    const [displayName, setDisplayName] = useState("");
+    const [photoURL, setPhotoURL] = useState("");
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if(profile) {
+            setDisplayName(profile.displayName);
+            setPhotoURL(profile.photoURL);
+        }
+    }, [profile]);
 
     const handleUpdateProfile = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user) return;
+        if (!user || !userProfileRef) return;
         setLoading(true);
 
         try {
-            const userDocRef = doc(db, 'users', user.uid);
-            await updateDoc(userDocRef, {
+            updateDocumentNonBlocking(userProfileRef, {
                 displayName,
                 photoURL
             });
@@ -47,7 +63,7 @@ export default function ProfilePage() {
         }
     };
 
-    if (!profile) return null;
+    if (isProfileLoading || !profile) return <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
 
     return (
         <div className="container mx-auto p-0">
