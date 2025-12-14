@@ -45,8 +45,8 @@ const requestTypes: RequestType[] = ['Project Material', 'Collaboration', 'Teach
 const urgencies: Urgency[] = ['Low', 'Medium', 'High', 'Extreme'];
 
 const formSchema = z.object({
-  title: z.string().min(5, 'Title must be at least 5 characters.'),
-  description: z.string().min(20, 'Description must be at least 20 characters.'),
+  title: z.string().min(5, 'Title must be at least 5 characters.').max(100, 'Title must be 100 characters or less.'),
+  description: z.string().min(20, 'Description must be at least 20 characters.').max(500, 'Description must be 500 characters or less.'),
   type: z.enum(requestTypes as [RequestType, ...RequestType[]]),
   urgency: z.enum(urgencies as [Urgency, ...Urgency[]]),
 });
@@ -83,14 +83,16 @@ export default function NewRequestPage() {
     return typeCost + urgencyCost;
   }, [selectedType, selectedUrgency]);
 
+  const hasSufficientFunds = profile ? profile.walletBalance >= totalCost : false;
+
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     if (!user || !profile) {
         toast({ variant: 'destructive', title: 'Error', description: 'You must be logged in to create a request.' });
         return;
     }
 
-    if (profile.walletBalance < totalCost) {
-        toast({ variant: 'destructive', title: 'Insufficient Funds', description: 'You do not have enough coins to create this request.' });
+    if (!hasSufficientFunds) {
+        toast({ variant: 'destructive', title: 'Insufficient Funds', description: `You do not have enough coins. You need ${totalCost - profile.walletBalance} more coins.` });
         return;
     }
 
@@ -102,7 +104,7 @@ export default function NewRequestPage() {
             const userDoc = await transaction.get(userDocRef);
     
             if (!userDoc.exists() || userDoc.data().walletBalance < totalCost) {
-              throw new Error('Insufficient funds.');
+              throw new Error('Insufficient funds. Your balance may have changed.');
             }
     
             transaction.update(userDocRef, {
@@ -121,7 +123,7 @@ export default function NewRequestPage() {
             transaction.set(newRequestRef, newRequest);
         });
 
-        toast({ title: 'Success!', description: 'Your request has been posted.' });
+        toast({ title: 'Success!', description: `Request Posted! -${totalCost} Coins` });
         router.push('/my-requests');
 
     } catch (error: any) {
@@ -239,9 +241,14 @@ export default function NewRequestPage() {
                         <Coins className="h-8 w-8" />
                         <span>{totalCost}</span>
                     </div>
+                    {!hasSufficientFunds && profile && totalCost > 0 && (
+                        <p className="text-red-500 text-xs mt-2">
+                            Insufficient Funds. You need {totalCost - profile.walletBalance} more coins.
+                        </p>
+                    )}
                 </CardContent>
                 <CardFooter>
-                    <Button type="submit" className="w-full" size="lg" disabled={loading || totalCost === 0}>
+                    <Button type="submit" className="w-full" size="lg" disabled={loading || totalCost === 0 || !hasSufficientFunds}>
                         {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
                         Submit Request
                     </Button>

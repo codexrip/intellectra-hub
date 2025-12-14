@@ -51,6 +51,9 @@ export default function MyRequestsPage() {
                 <div className="text-center py-16 border-2 border-dashed rounded-lg">
                     <h2 className="text-xl font-semibold">No Requests Found</h2>
                     <p className="text-muted-foreground mt-2">You haven't created any requests yet.</p>
+                    <Button asChild className="mt-4">
+                        <Link href="/requests/new">Create Your First Request</Link>
+                    </Button>
                 </div>
             ) : (
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
