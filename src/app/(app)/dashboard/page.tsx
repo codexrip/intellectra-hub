@@ -2,12 +2,13 @@
 
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
-import { Loader2 } from 'lucide-react';
+import { Loader2, PlusCircle, Store } from 'lucide-react';
 import { UserProfile } from '@/lib/types';
 import { VerificationBanner } from '@/components/dashboard/VerificationBanner';
-import { ProfileForm } from '@/components/dashboard/ProfileForm';
-import { WalletCard } from '@/components/dashboard/WalletCard';
-import { AccountDangerZone } from '@/components/dashboard/AccountDangerZone';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { Separator } from '@/components/ui/separator';
 
 export default function DashboardPage() {
   const { user, isUserLoading } = useUser();
@@ -33,16 +34,70 @@ export default function DashboardPage() {
       <div className="space-y-6">
         <VerificationBanner user={user} />
         
-        <h1 className="text-3xl font-bold font-headline">Dashboard</h1>
+        <div>
+          <h1 className="text-3xl font-bold font-headline">Welcome back, {profile.displayName}!</h1>
+          <p className="text-muted-foreground mt-1">Here's a quick overview of your Intellectra Hub.</p>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            <ProfileForm profile={profile} />
-            <AccountDangerZone />
-          </div>
-          <div className="lg:col-span-1">
-            <WalletCard profile={profile} />
-          </div>
+          
+          {/* Your Stats Card */}
+          <Card className="lg:col-span-1">
+            <CardHeader>
+              <CardTitle>Your Stats</CardTitle>
+              <CardDescription>Keep track of your progress and contributions.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex justify-between items-center bg-secondary p-3 rounded-md">
+                <span className="font-medium text-sm">Wallet Balance</span>
+                <span className="font-bold text-sm text-primary">{profile.walletBalance.toFixed(2)} Coins</span>
+              </div>
+              <div className="flex justify-between items-center bg-secondary p-3 rounded-md">
+                <span className="font-medium text-sm">Current Level</span>
+                <span className="font-bold text-sm text-primary">Level {profile.level}</span>
+              </div>
+              <div className="flex justify-between items-center bg-secondary p-3 rounded-md">
+                <span className="font-medium text-sm">Experience Points</span>
+                <span className="font-bold text-sm text-primary">{profile.xp} XP</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Get Started Card */}
+          <Card className="lg:col-span-1">
+            <CardHeader>
+              <CardTitle>Get Started</CardTitle>
+              <CardDescription>Jump right back into action.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <Button asChild size="lg">
+                <Link href="/requests/new">
+                  <PlusCircle className="mr-2 h-5 w-5" />
+                  Create a New Request
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="lg">
+                <Link href="/marketplace">
+                  <Store className="mr-2 h-5 w-5" />
+                  Browse Marketplace
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* How Leveling Works Card */}
+          <Card className="lg:col-span-1">
+            <CardHeader>
+              <CardTitle>How Leveling Works</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground space-y-3">
+                <p>Earn coins by solving requests in the marketplace.</p>
+                <p>Every coin you earn also grants you 1 Experience Point (XP).</p>
+                <p>Collect 100 XP to advance to the next level.</p>
+                <p className="font-semibold text-foreground">Each time you level up, you'll receive a <span className="text-primary">300 Coin Bonus</span> in your wallet!</p>
+            </CardContent>
+          </Card>
+
         </div>
       </div>
     </div>
