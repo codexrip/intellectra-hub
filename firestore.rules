@@ -57,7 +57,8 @@ service cloud.firestore {
     }
     
     function isRequestOwner(requestId) {
-        return request.auth.uid == get(/databases/$(database)/documents/requests/$(requestId)).data.requesterId;
+        let requestDoc = get(/databases/$(database)/documents/requests/$(requestId));
+        return request.auth.uid == requestDoc.data.requesterId;
     }
 
     /**
@@ -87,8 +88,7 @@ service cloud.firestore {
      * @principle Enforces strict document ownership within a user's private subcollection.
      */
     match /requests/{requestId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
+      allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.requesterId == request.auth.uid;
       allow update: if isRequestOwner(requestId);
       allow delete: if isRequestOwner(requestId);
@@ -105,8 +105,7 @@ service cloud.firestore {
      * @principle Implements shared access where a resource owner (requester) and contributors (solvers) have different permissions.
      */
     match /solutions/{solutionId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
+      allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.solverId == request.auth.uid;
       allow update: if (isRequestOwner(request.resource.data.requestId) || (isSignedIn() && request.auth.uid == resource.data.solverId));
       allow delete: if isSignedIn() && request.auth.uid == resource.data.solverId;
