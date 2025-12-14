@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -14,7 +15,9 @@ import {
   deleteDoc,
   where,
   increment,
-  addDoc
+  addDoc,
+  getDocs,
+  collectionGroup
 } from 'firebase/firestore';
 import { useUser, useFirestore, useDoc, useCollection, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
@@ -77,7 +80,7 @@ function FeedbackModal({ open, onOpenChange, onSubmit, solverName }: { open: boo
     );
 }
 
-function SolutionForm({ requestId }: { requestId: string }) {
+function SolutionForm({ requestId, requesterId }: { requestId: string, requesterId: string }) {
     const { user } = useUser();
     const firestore = useFirestore();
     const { toast } = useToast();
@@ -89,7 +92,7 @@ function SolutionForm({ requestId }: { requestId: string }) {
         if (!user || !content.trim()) return;
         setLoading(true);
         try {
-            addDocumentNonBlocking(collection(firestore, 'solutions'), {
+            addDocumentNonBlocking(collection(firestore, 'users', requesterId, 'requests', requestId, 'solutions'), {
                 requestId,
                 solverId: user.uid,
                 content,
@@ -136,31 +139,42 @@ export default function RequestDetailPage() {
     const router = useRouter();
 
     const requestId = Array.isArray(id) ? id[0] : id;
-
-    const requestDocRef = useMemoFirebase(() => {
-        if (!requestId) return null;
-        return doc(firestore, 'requests', requestId);
-    }, [firestore, requestId]);
     
-    const {data: request, isLoading: isRequestLoading } = useDoc<Request>(requestDocRef);
+    const [request, setRequest] = useState<Request | null>(null);
+    const [requestDocRef, setRequestDocRef] = useState<any>(null);
+    const [isRequestLoading, setIsRequestLoading] = useState(true);
+
+    useEffect(() => {
+        const findRequest = async () => {
+            if (!requestId || !firestore) return;
+            setIsRequestLoading(true);
+            const requestsQuery = query(collectionGroup(firestore, 'requests'), where('__name__', '==', `*/${requestId}`));
+            const querySnapshot = await getDocs(requestsQuery);
+
+            if (!querySnapshot.empty) {
+                const docSnap = querySnapshot.docs[0];
+                const docData = docSnap.data() as Omit<Request, 'id'>;
+                setRequest({ ...docData, id: docSnap.id });
+                setRequestDocRef(docSnap.ref);
+            } else {
+                 toast({ variant: 'destructive', title: 'Error', description: 'Request not found.' });
+                 router.push('/marketplace');
+            }
+            setIsRequestLoading(false);
+        };
+        findRequest();
+    }, [requestId, firestore, router, toast]);
 
     const solutionsQuery = useMemoFirebase(() => {
-        if (!requestId) return null;
-        return query(collection(firestore, 'solutions'), where('requestId', '==', requestId), orderBy('createdAt', 'desc'));
-    }, [firestore, requestId]);
-
+        if (!requestDocRef) return null;
+        return query(collection(requestDocRef, 'solutions'), orderBy('createdAt', 'desc'));
+    }, [requestDocRef]);
+    
     const { data: solutions, isLoading: areSolutionsLoading } = useCollection<Solution>(solutionsQuery);
     
     const [hydratedSolutions, setHydratedSolutions] = useState<Solution[]>([]);
     const [showFeedbackModal, setShowFeedbackModal] = useState(false);
     const [solutionToRate, setSolutionToRate] = useState<Solution | null>(null);
-
-    useEffect(() => {
-        if (request === null && !isRequestLoading) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Request not found.' });
-            router.push('/marketplace');
-        }
-    }, [request, isRequestLoading, router, toast]);
 
     useEffect(() => {
         if (solutions) {
@@ -194,15 +208,14 @@ export default function RequestDetailPage() {
     };
 
     const handleFeedbackSubmit = async (rating: number) => {
-        if (!request || !user || !solutionToRate) return;
+        if (!request || !user || !solutionToRate || !requestDocRef) return;
     
         setShowFeedbackModal(false);
 
         try {
             await runTransaction(firestore, async (transaction) => {
-                const requestRef = doc(firestore, 'requests', request.id);
                 const solverRef = doc(firestore, 'users', solutionToRate.solverId);
-                const solutionRef = doc(firestore, 'solutions', solutionToRate.id);
+                const solutionRef = doc(collection(requestDocRef, 'solutions'), solutionToRate.id);
                 
                 const solverDoc = await transaction.get(solverRef);
                 if (!solverDoc.exists()) throw new Error("Solver not found");
@@ -217,7 +230,7 @@ export default function RequestDetailPage() {
                     walletUpdate += LEVEL_UP_BONUS;
                 }
     
-                transaction.update(requestRef, { status: 'Completed' });
+                transaction.update(requestDocRef, { status: 'Completed' });
                 transaction.update(solutionRef, { isAccepted: true });
                 transaction.update(solverRef, {
                     walletBalance: increment(walletUpdate),
@@ -241,7 +254,7 @@ export default function RequestDetailPage() {
             deleteDocumentNonBlocking(requestDocRef);
             toast({ title: 'Request Deleted', description: 'Your request has been removed.' });
             router.push('/my-requests');
-        } catch (error) {
+        } catch (error) -> {
             toast({ variant: 'destructive', title: 'Error', description: 'Failed to delete request.' });
         }
     };
@@ -331,6 +344,7 @@ export default function RequestDetailPage() {
                             {isOwner && request.status === 'Open' && (
                                 <CardFooter>
                                     <Button onClick={() => handleMarkAsCompleted(solution)}><CheckCircle className="mr-2 h-4 w-4"/>Mark as Completed</Button>
+
                                 </CardFooter>
                             )}
                         </Card>
@@ -341,7 +355,7 @@ export default function RequestDetailPage() {
             </div>
 
             {!isOwner && request.status === 'Open' && !solutions?.some(s => s.solverId === user?.uid) && (
-                <SolutionForm requestId={requestId} />
+                <SolutionForm requestId={requestId} requesterId={request.requesterId} />
             )}
         </div>
     );

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -68,7 +69,7 @@ const runRequestTransaction = (
       walletBalance: userDoc.data().walletBalance - totalCost,
     });
 
-    const newRequestRef = doc(collection(firestore, 'requests'));
+    const newRequestRef = doc(collection(firestore, 'users', user.uid, 'requests'));
     const newRequest: Omit<Request, 'id'> = {
       requesterId: user.uid,
       ...values,

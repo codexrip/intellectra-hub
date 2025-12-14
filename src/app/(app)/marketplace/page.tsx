@@ -1,6 +1,7 @@
+
 "use client";
 
-import { collection, query, where, orderBy } from 'firebase/firestore';
+import { collectionGroup, query, where, orderBy } from 'firebase/firestore';
 import { useState } from 'react';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { Request, RequestType } from '@/lib/types';
@@ -15,7 +16,7 @@ export default function MarketplacePage() {
     const [filter, setFilter] = useState<RequestType | 'All'>('All');
 
     const requestsQuery = useMemoFirebase(() => {
-        const requestsRef = collection(firestore, 'requests');
+        const requestsRef = collectionGroup(firestore, 'requests');
         if (filter === 'All') {
             return query(
                 requestsRef,
