@@ -14,7 +14,10 @@ import {
   serverTimestamp,
   increment,
   Timestamp,
-  orderBy
+  orderBy,
+  updateDoc,
+  getDoc,
+  writeBatch
 } from 'firebase/firestore';
 import { useUser, useFirestore, useDoc, useCollection, useMemoFirebase } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
@@ -88,6 +91,49 @@ function SolutionForm({ onSubmit, disabled }: { onSubmit: (content: string, link
     );
 }
 
+function RatingDialog({ open, onOpenChange, solverName, onSubmit }: { open: boolean, onOpenChange: (open: boolean) => void, solverName: string, onSubmit: (rating: number) => Promise<void> }) {
+    const [rating, setRating] = useState(0);
+    const [loading, setLoading] = useState(false);
+
+    const handleSubmit = async () => {
+        if (rating === 0) return;
+        setLoading(true);
+        await onSubmit(rating);
+        setLoading(false);
+        onOpenChange(false);
+    }
+
+    return (
+        <AlertDialog open={open} onOpenChange={onOpenChange}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Rate {solverName}</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Provide feedback to help the community. Your rating is final.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="flex justify-center py-4">
+                    {[1, 2, 3, 4, 5].map(star => (
+                        <Star
+                            key={star}
+                            className={`h-10 w-10 cursor-pointer ${rating >= star ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`}
+                            onClick={() => setRating(star)}
+                        />
+                    ))}
+                </div>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Skip</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleSubmit} disabled={loading || rating === 0}>
+                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Submit Rating
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
+}
+
+
 // --- MAIN PAGE COMPONENT ---
 
 export default function RequestDetailPage() {
@@ -97,6 +143,10 @@ export default function RequestDetailPage() {
     const { toast } = useToast();
     const router = useRouter();
     const requestId = Array.isArray(id) ? id[0] : id;
+
+    const [processingSolutionId, setProcessingSolutionId] = useState<string | null>(null);
+    const [ratingInfo, setRatingInfo] = useState<{ open: boolean, solution: Solution | null }>({ open: false, solution: null });
+
 
     // --- DATA FETCHING ---
     
@@ -129,7 +179,9 @@ export default function RequestDetailPage() {
         if (!user || !request) return;
 
         try {
-            await addDoc(collection(firestore, 'solutions'), {
+            const newSolutionRef = doc(collection(firestore, "solutions"));
+            await setDoc(newSolutionRef, {
+                id: newSolutionRef.id,
                 requestId: request.id,
                 solverId: user.uid,
                 solverName: user.displayName || 'Anonymous Solver',
@@ -144,12 +196,103 @@ export default function RequestDetailPage() {
             toast({ variant: 'destructive', title: 'Error', description: 'Failed to submit solution.' });
         }
     };
+
+    const handleAcceptSolution = async (solution: Solution) => {
+        if (!firestore || !request) return;
+        setProcessingSolutionId(solution.id);
+    
+        try {
+            await runTransaction(firestore, async (transaction) => {
+                const requestRef = doc(firestore, 'requests', request.id);
+                const solverRef = doc(firestore, 'users', solution.solverId);
+                const solutionRef = doc(firestore, 'solutions', solution.id);
+    
+                // 1. Read data
+                const requestDoc = await transaction.get(requestRef);
+                const solverDoc = await transaction.get(solverRef);
+    
+                if (!requestDoc.exists() || !solverDoc.exists()) {
+                    throw new Error("Request or solver no longer exists.");
+                }
+    
+                const requestData = requestDoc.data() as Request;
+                const solverData = solverDoc.data() as UserProfile;
+    
+                // 2. Safety Check
+                if (requestData.status !== 'Open') {
+                    throw new Error("This request is already completed.");
+                }
+    
+                // 3. Calculate Values
+                const reward = Math.round(requestData.cost * REWARD_PERCENTAGE);
+                const xpGain = reward; // 1 coin = 1 XP
+                const newXp = solverData.xp + xpGain;
+                
+                let newBalance = solverData.walletBalance + reward;
+                
+                // 4. Level-Up Logic
+                const currentLevel = solverData.level;
+                const calculatedLevel = Math.floor(newXp / XP_PER_LEVEL) + 1;
+                let finalLevel = currentLevel;
+                
+                if (calculatedLevel > currentLevel) {
+                    const levelsGained = calculatedLevel - currentLevel;
+                    const bonus = levelsGained * LEVEL_UP_BONUS;
+                    newBalance += bonus;
+                    finalLevel = calculatedLevel;
+                    toast({ title: 'Level Up!', description: `You reached level ${finalLevel} and earned a bonus of ${bonus} coins!` });
+                }
+                
+                // 5. Write Data
+                transaction.update(requestRef, { status: 'Completed' });
+                transaction.update(solutionRef, { status: 'Accepted' });
+                transaction.update(solverRef, {
+                    walletBalance: newBalance,
+                    xp: newXp,
+                    level: finalLevel,
+                });
+            });
+    
+            toast({ title: "Solution Accepted!", description: `Paid ${solution.solverName} ${rewardAmount} coins.` });
+            setRatingInfo({ open: true, solution: solution });
+    
+        } catch (error: any) {
+            console.error("Error accepting solution:", error);
+            toast({ variant: 'destructive', title: 'Transaction Failed', description: error.message });
+        } finally {
+            setProcessingSolutionId(null);
+        }
+    };
+    
+    const handleRatingSubmit = async (rating: number) => {
+        if (!ratingInfo.solution) return;
+        
+        try {
+            const solverRef = doc(firestore, 'users', ratingInfo.solution.solverId);
+            // This is a simplified rating update. For a real app, you'd need to store the rating count.
+            // For this demo, we'll just set the rating directly. A more robust solution would be a transaction.
+            await updateDoc(solverRef, {
+                rating: rating // Simplified for demo
+            });
+            toast({ title: "Rating Submitted", description: "Thank you for your feedback!" });
+        } catch (error) {
+            console.error("Error submitting rating:", error);
+            toast({ variant: "destructive", title: "Error", description: "Could not submit rating." });
+        }
+    };
     
     const handleDeleteRequest = async () => {
         if (!requestDocRef) return;
         try {
-            await deleteDoc(requestDocRef);
-            toast({ title: 'Request Deleted', description: 'Your request has been removed.' });
+            // Also delete associated solutions
+            const q = query(collection(firestore, 'solutions'), where('requestId', '==', requestId));
+            const solutionDocs = await getDocs(q);
+            const batch = writeBatch(firestore);
+            solutionDocs.forEach(doc => batch.delete(doc.ref));
+            batch.delete(requestDocRef);
+            await batch.commit();
+
+            toast({ title: 'Request Deleted', description: 'Your request and all its solutions have been removed.' });
             router.push('/my-requests');
         } catch (error) {
             console.error("Error deleting request:", error);
@@ -177,7 +320,7 @@ export default function RequestDetailPage() {
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
                                     <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle></AlertDialogHeader>
-                                    <AlertDialogDescription>This action cannot be undone. This will permanently delete your request.</AlertDialogDescription>
+                                    <AlertDialogDescription>This action cannot be undone. This will permanently delete your request and all its solutions.</AlertDialogDescription>
                                     <AlertDialogFooter>
                                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                                         <AlertDialogAction onClick={handleDeleteRequest}>Continue</AlertDialogAction>
@@ -278,7 +421,7 @@ export default function RequestDetailPage() {
                             <CardHeader className="flex flex-row justify-between items-start">
                                 <div className="flex items-center gap-3">
                                     <Avatar>
-                                        <AvatarImage src={(solution as any).solverProfile?.photoURL} />
+                                        {/* You might want to fetch solver's profile for the avatar */}
                                         <AvatarFallback>{solution.solverName?.charAt(0)}</AvatarFallback>
                                     </Avatar>
                                     <div>
@@ -292,13 +435,11 @@ export default function RequestDetailPage() {
                                 <p className="whitespace-pre-wrap">{solution.content}</p>
                                 {solution.link && <a href={solution.link} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">View Attached Link</a>}
                             </CardContent>
-                             {isOwner && request.status === 'Open' && (
+                             {isOwner && request.status === 'Open' && solution.status === 'Pending' && (
                                 <CardFooter>
-                                    <Button onClick={() => {
-                                        // Placeholder for next step's logic
-                                        toast({title: 'Coming Soon!', description: 'Accepting solutions will be implemented next.'})
-                                    }}>
-                                        <CheckCircle className="mr-2 h-4 w-4"/>Accept Solution
+                                    <Button onClick={() => handleAcceptSolution(solution)} disabled={processingSolutionId !== null}>
+                                        {processingSolutionId === solution.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle className="mr-2 h-4 w-4"/>}
+                                        Accept & Pay
                                     </Button>
                                 </CardFooter>
                             )}
@@ -309,6 +450,14 @@ export default function RequestDetailPage() {
                 )}
             </div>
 
+            {ratingInfo.solution && (
+                <RatingDialog
+                    open={ratingInfo.open}
+                    onOpenChange={(open) => setRatingInfo({ open, solution: open ? ratingInfo.solution : null })}
+                    solverName={ratingInfo.solution.solverName}
+                    onSubmit={handleRatingSubmit}
+                />
+            )}
         </div>
     );
 }
