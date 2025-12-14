@@ -18,7 +18,7 @@ service cloud.firestore {
     }
 
     match /requests/{requestId} {
-      // Allow any signed-in user to read (list/get) and create requests.
+      // Allow any signed-in user to read and create requests.
       allow read, create: if isSignedIn();
       
       // Only allow the original requester to update or delete their own request.
@@ -26,7 +26,7 @@ service cloud.firestore {
     }
 
     match /solutions/{solutionId} {
-      // Allow any signed-in user to read (list/get) and create solutions.
+      // Allow any signed-in user to read and create solutions.
       allow read, create: if isSignedIn();
 
       // Only allow the solution owner or request owner to update a solution (e.g. to accept it)
