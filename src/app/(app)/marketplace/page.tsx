@@ -1,8 +1,8 @@
 
 "use client";
 
-import { collectionGroup, query, where, orderBy } from 'firebase/firestore';
-import { useState } from 'react';
+import { collection, query, where, orderBy, Timestamp } from 'firebase/firestore';
+import { useState, useMemo, useEffect } from 'react';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { Request, RequestType } from '@/lib/types';
 import { RequestCard } from '@/components/requests/RequestCard';
@@ -14,21 +14,31 @@ const requestTypes: RequestType[] = ['Project Material', 'Collaboration', 'Teach
 export default function MarketplacePage() {
     const firestore = useFirestore();
     const [filter, setFilter] = useState<RequestType | 'All'>('All');
+    const [sortedRequests, setSortedRequests] = useState<Request[]>([]);
 
     const requestsQuery = useMemoFirebase(() => {
-        const requestsRef = collectionGroup(firestore, 'requests');
+        const requestsRef = collection(firestore, 'requests');
         let q = query(requestsRef, where('status', '==', 'Open'));
 
         if (filter !== 'All') {
             q = query(q, where('type', '==', filter));
         }
-
-        q = query(q, orderBy('createdAt', 'desc'));
         
         return q;
     }, [firestore, filter]);
 
     const { data: requests, isLoading } = useCollection<Request>(requestsQuery);
+
+    useEffect(() => {
+        if(requests) {
+            const sorted = [...requests].sort((a, b) => {
+                const dateA = (a.createdAt as Timestamp)?.toMillis() || 0;
+                const dateB = (b.createdAt as Timestamp)?.toMillis() || 0;
+                return dateB - dateA;
+            });
+            setSortedRequests(sorted);
+        }
+    }, [requests]);
 
     return (
         <div className="container mx-auto p-0">
@@ -54,19 +64,17 @@ export default function MarketplacePage() {
                 <div className="flex justify-center items-center h-64">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
-            ) : requests && requests.length === 0 ? (
+            ) : sortedRequests && sortedRequests.length === 0 ? (
                 <div className="text-center py-16 border-2 border-dashed rounded-lg">
                     <h2 className="text-xl font-semibold">No Open Requests</h2>
                     <p className="text-muted-foreground mt-2">Check back later or try a different filter.</p>
                 </div>
             ) : (
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {requests?.map((request) => (
+                    {sortedRequests?.map((request) => (
                         <RequestCard key={request.id} request={request} />
                     ))}
                 </div>
             )}
         </div>
     );
-
-    

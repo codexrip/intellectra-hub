@@ -51,35 +51,6 @@ const formSchema = z.object({
   urgency: z.enum(urgencies as [Urgency, ...Urgency[]]),
 });
 
-const runRequestTransaction = (
-  firestore: any,
-  user: any,
-  totalCost: number,
-  values: z.infer<typeof formSchema>
-) => {
-  return runTransaction(firestore, async (transaction: Transaction) => {
-    const userDocRef = doc(firestore, 'users', user.uid);
-    const userDoc = await transaction.get(userDocRef);
-
-    if (!userDoc.exists() || userDoc.data().walletBalance < totalCost) {
-      throw new Error('Insufficient funds.');
-    }
-
-    transaction.update(userDocRef, {
-      walletBalance: userDoc.data().walletBalance - totalCost,
-    });
-
-    const newRequestRef = doc(collection(firestore, 'users', user.uid, 'requests'));
-    const newRequest: Omit<Request, 'id'> = {
-      requesterId: user.uid,
-      ...values,
-      cost: totalCost,
-      status: 'Open',
-      createdAt: serverTimestamp() as any,
-    };
-    transaction.set(newRequestRef, newRequest);
-  });
-};
 
 export default function NewRequestPage() {
   const { user } = useUser();
@@ -112,7 +83,7 @@ export default function NewRequestPage() {
     return typeCost + urgencyCost;
   }, [selectedType, selectedUrgency]);
 
-  const onSubmit = (values: z.infer<typeof formSchema>) => {
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
     if (!user || !profile) {
         toast({ variant: 'destructive', title: 'Error', description: 'You must be logged in to create a request.' });
         return;
@@ -125,23 +96,40 @@ export default function NewRequestPage() {
 
     setLoading(true);
 
-    runRequestTransaction(firestore, user, totalCost, values)
-      .then(() => {
+    try {
+        await runTransaction(firestore, async (transaction) => {
+            const userDocRef = doc(firestore, 'users', user.uid);
+            const userDoc = await transaction.get(userDocRef);
+    
+            if (!userDoc.exists() || userDoc.data().walletBalance < totalCost) {
+              throw new Error('Insufficient funds.');
+            }
+    
+            transaction.update(userDocRef, {
+              walletBalance: userDoc.data().walletBalance - totalCost,
+            });
+    
+            const newRequestRef = doc(collection(firestore, 'requests'));
+            const newRequest: Omit<Request, 'id'> = {
+              requesterId: user.uid,
+              requesterName: profile.displayName,
+              ...values,
+              cost: totalCost,
+              status: 'Open',
+              createdAt: serverTimestamp() as any,
+            };
+            transaction.set(newRequestRef, newRequest);
+        });
+
         toast({ title: 'Success!', description: 'Your request has been posted.' });
         router.push('/my-requests');
-      })
-      .catch((error) => {
+
+    } catch (error: any) {
         console.error('Error creating request:', error);
-        
-        if (error instanceof FirestorePermissionError) {
-          errorEmitter.emit('permission-error', error);
-        } else {
-           toast({ variant: 'destructive', title: 'Error', description: error.message || 'Failed to create request. Please try again.' });
-        }
-      })
-      .finally(() => {
+        toast({ variant: 'destructive', title: 'Error', description: error.message || 'Failed to create request. Please try again.' });
+    } finally {
         setLoading(false);
-      });
+    }
   };
 
   return (

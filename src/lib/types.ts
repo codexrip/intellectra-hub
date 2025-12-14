@@ -20,6 +20,7 @@ export type RequestStatus = 'Open' | 'Closed' | 'Completed';
 export interface Request {
   id: string;
   requesterId: string;
+  requesterName: string;
   title: string;
   description: string;
   urgency: Urgency;
@@ -29,12 +30,16 @@ export interface Request {
   createdAt: Timestamp;
 }
 
+export type SolutionStatus = 'Pending' | 'Accepted';
+
 export interface Solution {
   id: string;
   requestId: string;
   solverId: string;
+  solverName: string;
   content: string;
-  isAccepted: boolean;
+  link?: string;
+  status: SolutionStatus;
   createdAt: Timestamp;
   solver?: {
     displayName: string;

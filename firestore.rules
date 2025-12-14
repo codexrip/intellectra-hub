@@ -2,37 +2,33 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Allow read access to user profiles for anyone signed in
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
     match /users/{userId} {
-      allow read, write: if isSignedIn();
-    }
-
-    // Rules for the 'requests' subcollection within each user document
-    match /users/{userId}/requests/{requestId} {
-      allow read, write: if isSignedIn();
-    }
-    
-    // This rule is necessary to allow collection group queries on 'requests'
-    match /{path=**}/requests/{requestId} {
       allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.uid == userId;
+      allow update: if isOwner(userId);
     }
 
-    // Rules for the 'solutions' subcollection
-    match /users/{userId}/requests/{requestId}/solutions/{solutionId} {
-       allow read, write: if isSignedIn();
+    match /requests/{requestId} {
+      allow read, create: if isSignedIn();
+      allow update, delete: if isSignedIn() && resource.data.requesterId == request.auth.uid;
+    }
+
+    match /solutions/{solutionId} {
+      allow read, create: if isSignedIn();
+      allow update: if isSignedIn();
     }
     
-    // Security logs can be created by anyone (for failed login attempts)
-    // and read by anyone for the demo. In production, this would be more secure.
     match /security_logs/{logId} {
       allow read, create: if true;
     }
   }
 }
-
-    

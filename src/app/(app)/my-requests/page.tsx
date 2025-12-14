@@ -16,9 +16,10 @@ export default function MyRequestsPage() {
 
     const userRequestsQuery = useMemoFirebase(() => {
         if (!user) return null;
-        const requestsRef = collection(firestore, 'users', user.uid, 'requests');
+        const requestsRef = collection(firestore, 'requests');
         return query(
             requestsRef,
+            where('requesterId', '==', user.uid),
             orderBy('createdAt', 'desc')
         );
     }, [firestore, user]);
