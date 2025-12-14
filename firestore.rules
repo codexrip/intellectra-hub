@@ -18,8 +18,10 @@ service cloud.firestore {
     }
 
     match /requests/{requestId} {
-      // Allow any signed-in user to read requests for the marketplace.
+      // Allow any signed-in user to read requests for the marketplace and detail view.
       allow read: if isSignedIn();
+      
+      // Allow users to create requests.
       allow create: if isSignedIn();
       
       // Only allow the original requester to update or delete their own request.
