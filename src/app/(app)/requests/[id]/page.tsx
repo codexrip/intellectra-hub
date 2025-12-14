@@ -14,10 +14,11 @@ import {
   serverTimestamp,
   increment,
   Timestamp,
-  orderBy,
   updateDoc,
   getDoc,
-  writeBatch
+  writeBatch,
+  setDoc,
+  getDocs
 } from 'firebase/firestore';
 import { useUser, useFirestore, useDoc, useCollection, useMemoFirebase } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
@@ -146,6 +147,7 @@ export default function RequestDetailPage() {
 
     const [processingSolutionId, setProcessingSolutionId] = useState<string | null>(null);
     const [ratingInfo, setRatingInfo] = useState<{ open: boolean, solution: Solution | null }>({ open: false, solution: null });
+    const [sortedSolutions, setSortedSolutions] = useState<Solution[]>([]);
 
 
     // --- DATA FETCHING ---
@@ -159,11 +161,22 @@ export default function RequestDetailPage() {
 
     const solutionsQuery = useMemoFirebase(() => {
         if (!requestId || !firestore) return null;
-        return query(collection(firestore, 'solutions'), where('requestId', '==', requestId), orderBy('createdAt', 'desc'));
+        return query(collection(firestore, 'solutions'), where('requestId', '==', requestId));
     }, [requestId, firestore]);
 
     const { data: solutions, isLoading: areSolutionsLoading } = useCollection<Solution>(solutionsQuery);
     
+    useEffect(() => {
+        if(solutions) {
+            const sorted = [...solutions].sort((a, b) => {
+                const dateA = (a.createdAt as Timestamp)?.toMillis() || 0;
+                const dateB = (b.createdAt as Timestamp)?.toMillis() || 0;
+                return dateB - dateA;
+            });
+            setSortedSolutions(sorted);
+        }
+    }, [solutions]);
+
     // --- STATE & DERIVED VALUES ---
 
     const isOwner = user?.uid === request?.requesterId;
@@ -412,11 +425,11 @@ export default function RequestDetailPage() {
 
             {/* --- Solutions Section --- */}
             <div className="space-y-6">
-                <h2 className="text-2xl font-bold font-headline">Solutions ({solutions?.length || 0})</h2>
+                <h2 className="text-2xl font-bold font-headline">Solutions ({sortedSolutions.length || 0})</h2>
                 {areSolutionsLoading ? (
                      <div className="flex justify-center items-center h-24"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-                ) : solutions && solutions.length > 0 ? (
-                    solutions.map(solution => (
+                ) : sortedSolutions && sortedSolutions.length > 0 ? (
+                    sortedSolutions.map(solution => (
                         <Card key={solution.id} className={solution.status === 'Accepted' ? "border-primary bg-primary/5" : ""}>
                             <CardHeader className="flex flex-row justify-between items-start">
                                 <div className="flex items-center gap-3">
