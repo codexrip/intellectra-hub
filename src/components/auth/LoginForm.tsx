@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { useAuth, useFirestore, initiateEmailSignIn } from "@/firebase";
+import { useAuth, useFirestore } from "@/firebase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -64,21 +64,36 @@ export function LoginForm() {
     
     if (querySnapshot.empty) return null;
 
-    const log = querySnapshot.docs[0].data() as SecurityLog;
+    const logDoc = querySnapshot.docs[0];
+    const log = logDoc.data() as SecurityLog;
+
+    // This may not exist on older documents
+    if (!log.lastAttemptTime) return null;
+
     const now = Timestamp.now();
 
     const fiveHoursAgo = new Timestamp(now.seconds - SHORT_FREEZE_HOURS * 3600, now.nanoseconds);
     const twentyFourHoursAgo = new Timestamp(now.seconds - LONG_FREEZE_HOURS * 3600, now.nanoseconds);
     
+    // Check for 24-hour freeze
     if (log.lastAttemptTime > twentyFourHoursAgo && log.failedAttempts > MAX_FAILED_ATTEMPTS_LONG) {
         const freezeUntil = new Timestamp(log.lastAttemptTime.seconds + LONG_FREEZE_HOURS * 3600, log.lastAttemptTime.nanoseconds);
         if (now < freezeUntil) {
             return `Account frozen for 24 hours due to too many failed attempts. Try again later.`;
+        } else {
+            // If freeze period is over, reset attempts
+            await updateDoc(logDoc.ref, { failedAttempts: 0 });
         }
     }
     
+    // Check for 5-hour freeze
     if (log.lastAttemptTime > fiveHoursAgo && log.failedAttempts > MAX_FAILED_ATTEMPTS_SHORT) {
-        return `Account frozen temporarily due to multiple failed login attempts. Please try again in a while.`;
+      const freezeUntil = new Timestamp(log.lastAttemptTime.seconds + SHORT_FREEZE_HOURS * 3600, log.lastAttemptTime.nanoseconds);
+        if (now < freezeUntil) {
+            return `Account frozen temporarily due to multiple failed login attempts. Please try again in a while.`;
+        } else {
+           await updateDoc(logDoc.ref, { failedAttempts: 0 });
+        }
     }
 
     return null;
