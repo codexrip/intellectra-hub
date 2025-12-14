@@ -23,8 +23,8 @@ service cloud.firestore {
     }
 
     match /solutions/{solutionId} {
-      allow read, create: if isSignedIn();
-      allow update: if isSignedIn();
+      allow get, create, update: if isSignedIn();
+      allow list: if isSignedIn();
     }
     
     match /security_logs/{logId} {
