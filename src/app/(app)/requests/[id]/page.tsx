@@ -155,7 +155,10 @@ export default function RequestDetailPage() {
                 const hydrated = await Promise.all(solutions.map(async (solution) => {
                     const solverDocRef = doc(firestore, 'users', solution.solverId);
                     // Using a transaction is overkill here, a simple get is fine.
-                    const solverSnap = await runTransaction(firestore, t => t.get(solverDocRef));
+                    // This was also causing issues, replacing with a direct getDoc
+                    const { getDoc } = await import('firebase/firestore');
+                    const solverSnap = await getDoc(solverDocRef);
+
                     if(solverSnap.exists()){
                         return {
                             ...solution,
