@@ -90,7 +90,7 @@ function SolutionForm({ requestId, requesterId }: { requestId: string, requester
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user || !content.trim()) return;
+        if (!user || !content.trim() || !requesterId) return;
         setLoading(true);
         try {
             const solutionCollectionRef = collection(firestore, 'users', requesterId, 'requests', requestId, 'solutions');
@@ -147,53 +147,33 @@ export default function RequestDetailPage() {
     const [isRequestLoading, setIsRequestLoading] = useState(true);
 
     useEffect(() => {
-        const findRequest = async () => {
-            if (!requestId || !firestore) return;
-            setIsRequestLoading(true);
-            
-            const requestsCollectionGroup = collectionGroup(firestore, 'requests');
-            const q = query(requestsCollectionGroup, where('id', '==', requestId));
-            
-            try {
-                const querySnapshot = await getDocs(q);
-                if (!querySnapshot.empty) {
-                    const foundDoc = querySnapshot.docs[0];
-                    const docData = foundDoc.data() as Omit<Request, 'id'>;
-                    setRequest({ ...docData, id: foundDoc.id });
-                    setRequestDocRef(foundDoc.ref);
-                } else {
-                     toast({ variant: 'destructive', title: 'Error', description: 'Request not found.' });
-                     router.push('/marketplace');
-                }
-            } catch (error) {
-                console.error("Error finding request:", error);
-                toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch request details.' });
-                router.push('/marketplace');
-            } finally {
-                setIsRequestLoading(false);
-            }
-        };
-
         const findRequestDoc = async () => {
             if (!requestId || !firestore) return;
             setIsRequestLoading(true);
 
+            // Use a collection group query to find the request across all users.
             const requestsCollection = collectionGroup(firestore, 'requests');
             const q = query(requestsCollection, where('id', '==', requestId));
-            const querySnapshot = await getDocs(q);
+            
+            try {
+                const querySnapshot = await getDocs(q);
 
-            if (querySnapshot.empty) {
-                toast({ variant: 'destructive', title: 'Error', description: 'Request not found.' });
-                router.push('/marketplace');
+                if (querySnapshot.empty) {
+                    toast({ variant: 'destructive', title: 'Error', description: 'Request not found.' });
+                    router.push('/marketplace');
+                    return;
+                }
+
+                const requestDoc = querySnapshot.docs[0];
+                setRequestDocRef(requestDoc.ref);
+                setRequest({ ...requestDoc.data(), id: requestDoc.id } as Request);
+            } catch (error) {
+                console.error("Error fetching request:", error);
+                toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch request details.' });
+            } finally {
                 setIsRequestLoading(false);
-                return;
             }
-
-            const requestDoc = querySnapshot.docs[0];
-            setRequestDocRef(requestDoc.ref);
-            setRequest({ id: requestDoc.id, ...requestDoc.data() } as Request);
-            setIsRequestLoading(false);
-        }
+        };
         
         findRequestDoc();
 
@@ -206,9 +186,9 @@ export default function RequestDetailPage() {
     
     const { data: solutions, isLoading: areSolutionsLoading } = useCollection<Solution>(solutionsQuery);
     
-    const [hydratedSolutions, setHydratedSolutions] = useState<Solution[]>([]);
+    const [hydratedSolutions, setHydratedSolutions] = useState<(Solution & {id: string})[]>([]);
     const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-    const [solutionToRate, setSolutionToRate] = useState<Solution | null>(null);
+    const [solutionToRate, setSolutionToRate] = useState<(Solution & {id: string}) | null>(null);
 
     useEffect(() => {
         if (solutions) {
@@ -219,13 +199,14 @@ export default function RequestDetailPage() {
                         const solverProfile = solverDoc.data() as UserProfile;
                         return {
                             ...solution,
+                            id: solution.id,
                             solver: {
                                 displayName: solverProfile.displayName,
                                 photoURL: solverProfile.photoURL,
                             }
                         }
                     }
-                    return solution;
+                    return {...solution, id: solution.id};
                 }));
                 setHydratedSolutions(hydrated);
             };
@@ -236,7 +217,7 @@ export default function RequestDetailPage() {
     const isOwner = user?.uid === request?.requesterId;
     const isLoading = isRequestLoading || areSolutionsLoading;
 
-    const handleMarkAsCompleted = async (solution: Solution) => {
+    const handleMarkAsCompleted = async (solution: Solution & {id: string}) => {
         setSolutionToRate(solution);
         setShowFeedbackModal(true);
     };
@@ -275,6 +256,11 @@ export default function RequestDetailPage() {
             });
     
             toast({ title: 'Request Completed!', description: `Reward sent and feedback recorded.` });
+            
+            // Manually update local request state after transaction
+            setRequest(prev => prev ? {...prev, status: 'Completed'} : null);
+            setHydratedSolutions(prev => prev.map(sol => sol.id === solutionToRate.id ? {...sol, isAccepted: true} : sol));
+
         } catch (error) {
             console.error(error);
             toast({ variant: 'destructive', title: 'Error', description: 'Failed to complete request.' });
@@ -393,4 +379,5 @@ export default function RequestDetailPage() {
             )}
         </div>
     );
-}
+
+    

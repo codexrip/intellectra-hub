@@ -17,20 +17,15 @@ export default function MarketplacePage() {
 
     const requestsQuery = useMemoFirebase(() => {
         const requestsRef = collectionGroup(firestore, 'requests');
-        if (filter === 'All') {
-            return query(
-                requestsRef,
-                where('status', '==', 'Open'),
-                orderBy('createdAt', 'desc')
-            );
-        } else {
-            return query(
-                requestsRef,
-                where('status', '==', 'Open'),
-                where('type', '==', filter),
-                orderBy('createdAt', 'desc')
-            );
+        let q = query(requestsRef, where('status', '==', 'Open'));
+
+        if (filter !== 'All') {
+            q = query(q, where('type', '==', filter));
         }
+
+        q = query(q, orderBy('createdAt', 'desc'));
+        
+        return q;
     }, [firestore, filter]);
 
     const { data: requests, isLoading } = useCollection<Request>(requestsQuery);
@@ -73,4 +68,5 @@ export default function MarketplacePage() {
             )}
         </div>
     );
-}
+
+    
