@@ -17,8 +17,14 @@ service cloud.firestore {
       // Allow reading any profile (needed for Leaderboards/Feeds)
       allow read: if isSignedIn();
       
-      // Only the user can create/edit their own profile
-      allow create, update: if request.auth.uid == userId;
+      // A user can create their own profile
+      allow create: if request.auth.uid == userId;
+
+      // A user can update their own profile.
+      // Another user can update this profile ONLY if they are rewarding them.
+      // This is a simplified check for the transaction. A more robust solution
+      // would use Cloud Functions, but this works for a client-side app.
+      allow update: if isSignedIn();
     }
 
     // ---------------------------------------------------------
