@@ -12,7 +12,7 @@ import {
   runTransaction,
   serverTimestamp,
   deleteDoc,
-  writeBatch,
+  where,
   increment,
   addDoc
 } from 'firebase/firestore';
@@ -25,7 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, Coins, Zap, Edit, Trash2, Send, CheckCircle } from 'lucide-radix';
+import { Loader2, Coins, Zap, Trash2, Send, CheckCircle, Star } from 'lucide-react';
 import { REWARD_PERCENTAGE, LEVEL_UP_BONUS, XP_PER_LEVEL } from '@/lib/constants';
 import { formatDistanceToNow } from 'date-fns';
 import {
@@ -39,6 +39,44 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
   } from "@/components/ui/alert-dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Slider } from '@/components/ui/slider';
+
+function FeedbackModal({ open, onOpenChange, onSubmit, solverName }: { open: boolean, onOpenChange: (open: boolean) => void, onSubmit: (rating: number) => void, solverName: string }) {
+    const [rating, setRating] = useState(5);
+
+    const handleSubmit = () => {
+        onSubmit(rating);
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Rate Your Experience with {solverName}</DialogTitle>
+                    <DialogDescription>
+                        Your feedback helps maintain the quality of our community. Please rate the solution provided on a scale of 0 to 10.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="py-6">
+                    <div className="flex justify-center items-center gap-4">
+                        <Star className="text-yellow-400" />
+                        <span className="text-2xl font-bold w-12 text-center">{rating}</span>
+                    </div>
+                    <Slider
+                        min={0}
+                        max={10}
+                        step={1}
+                        value={[rating]}
+                        onValueChange={(value) => setRating(value[0])}
+                        className="mt-4"
+                    />
+                </div>
+                <Button onClick={handleSubmit}>Submit Feedback</Button>
+            </DialogContent>
+        </Dialog>
+    );
+}
 
 function SolutionForm({ requestId }: { requestId: string }) {
     const { user, profile } = useAuth();
@@ -92,12 +130,14 @@ function SolutionForm({ requestId }: { requestId: string }) {
 
 export default function RequestDetailPage() {
     const { id } = useParams();
-    const { user, profile } = useAuth();
+    const { user } = useAuth();
     const { toast } = useToast();
     const router = useRouter();
     const [request, setRequest] = useState<Request | null>(null);
     const [solutions, setSolutions] = useState<Solution[]>([]);
     const [loading, setLoading] = useState(true);
+    const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+    const [solutionToRate, setSolutionToRate] = useState<Solution | null>(null);
 
     const requestId = Array.isArray(id) ? id[0] : id;
 
@@ -118,8 +158,8 @@ export default function RequestDetailPage() {
         const solutionsQuery = query(collection(db, 'solutions'), where('requestId', '==', requestId), orderBy('createdAt', 'desc'));
         const unsubscribeSolutions = onSnapshot(solutionsQuery, async (snapshot) => {
             const solutionsData: Solution[] = [];
-            for (const doc of snapshot.docs) {
-                const solution = { id: doc.id, ...doc.data() } as Solution;
+            for (const docSnap of snapshot.docs) {
+                const solution = { id: docSnap.id, ...docSnap.data() } as Solution;
                 const solverDoc = await getDoc(doc(db, 'users', solution.solverId));
                 if(solverDoc.exists()){
                     const solverProfile = solverDoc.data() as UserProfile;
@@ -142,13 +182,20 @@ export default function RequestDetailPage() {
     const isOwner = user?.uid === request?.requesterId;
 
     const handleMarkAsCompleted = async (solution: Solution) => {
-        if (!request || !user) return;
+        setSolutionToRate(solution);
+        setShowFeedbackModal(true);
+    };
+
+    const handleFeedbackSubmit = async (rating: number) => {
+        if (!request || !user || !solutionToRate) return;
     
+        setShowFeedbackModal(false);
+
         try {
             await runTransaction(db, async (transaction) => {
                 const requestRef = doc(db, 'requests', request.id);
-                const solverRef = doc(db, 'users', solution.solverId);
-                const solutionRef = doc(db, 'solutions', solution.id);
+                const solverRef = doc(db, 'users', solutionToRate.solverId);
+                const solutionRef = doc(db, 'solutions', solutionToRate.id);
                 
                 const solverDoc = await transaction.get(solverRef);
                 if (!solverDoc.exists()) throw new Error("Solver not found");
@@ -168,15 +215,17 @@ export default function RequestDetailPage() {
                 transaction.update(solverRef, {
                     walletBalance: increment(walletUpdate),
                     xp: increment(reward),
-                    level: newLevel
+                    level: newLevel,
+                    rating: rating // For simplicity, we just set the new rating. A real app would average it.
                 });
             });
     
-            toast({ title: 'Request Completed!', description: `Reward of ${Math.round(request.cost * REWARD_PERCENTAGE)} coins sent to the solver.` });
+            toast({ title: 'Request Completed!', description: `Reward sent and feedback recorded.` });
         } catch (error) {
             console.error(error);
             toast({ variant: 'destructive', title: 'Error', description: 'Failed to complete request.' });
         }
+        setSolutionToRate(null);
     };
     
     const handleDeleteRequest = async () => {
@@ -197,6 +246,14 @@ export default function RequestDetailPage() {
 
     return (
         <div className="container mx-auto p-0 space-y-8">
+            {solutionToRate && (
+                <FeedbackModal
+                    open={showFeedbackModal}
+                    onOpenChange={setShowFeedbackModal}
+                    onSubmit={handleFeedbackSubmit}
+                    solverName={solutionToRate.solver?.displayName || 'Solver'}
+                />
+            )}
             <Card>
                 <CardHeader>
                     <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
@@ -256,7 +313,7 @@ export default function RequestDetailPage() {
                                     </Avatar>
                                     <div>
                                         <p className="font-semibold">{solution.solver?.displayName}</p>
-                                        <p className="text-xs text-muted-foreground">{formatDistanceToNow(solution.createdAt.toDate(), { addSuffix: true })}</p>
+                                        <p className="text-xs text-muted-foreground">{solution.createdAt ? formatDistanceToNow(solution.createdAt.toDate(), { addSuffix: true }) : ''}</p>
                                     </div>
                                 </div>
                                 {solution.isAccepted && <Badge className="bg-green-500 text-white"><CheckCircle className="mr-2 h-4 w-4"/>Accepted</Badge>}
