@@ -1,43 +1,8 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Helper: Check if user is signed in
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    // Helper: Check if user is the owner of the document
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-
-    // 1. USERS: Allow creating and reading your own profile
-    match /users/{userId} {
-      allow read: if isSignedIn(); // changed to allow reading profiles for the feed/leaderboard
-      allow create: if isSignedIn() && request.resource.data.uid == userId;
-      allow update: if isOwner(userId);
-    }
-
-    // 2. REQUESTS: Allow reading ALL requests (so the Marketplace works)
-    match /requests/{requestId} {
-      allow read: if isSignedIn(); // "list" falls under "read"
-      allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && resource.data.requesterId == request.auth.uid;
-    }
-
-    // 3. SOLUTIONS: Allow reading and creating
-    match /solutions/{solutionId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn();
-    }
-
-    // 4. SECURITY LOGS: FIXED RULE
-    // We MUST allow 'read' so your client-side Login Wrapper can check if the account is frozen.
-    // We allow 'create' so the client can log a failed attempt.
-    match /security_logs/{logId} {
-      allow read, create: if true; // Open for the demo so security logic works
+    match /{document=**} {
+      allow read, write: if true;
     }
   }
 }
