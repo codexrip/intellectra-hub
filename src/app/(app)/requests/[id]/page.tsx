@@ -17,7 +17,8 @@ import {
   increment,
   addDoc,
   getDocs,
-  collectionGroup
+  collectionGroup,
+  DocumentReference
 } from 'firebase/firestore';
 import { useUser, useFirestore, useDoc, useCollection, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
@@ -92,7 +93,8 @@ function SolutionForm({ requestId, requesterId }: { requestId: string, requester
         if (!user || !content.trim()) return;
         setLoading(true);
         try {
-            addDocumentNonBlocking(collection(firestore, 'users', requesterId, 'requests', requestId, 'solutions'), {
+            const solutionCollectionRef = collection(firestore, 'users', requesterId, 'requests', requestId, 'solutions');
+            addDocumentNonBlocking(solutionCollectionRef, {
                 requestId,
                 solverId: user.uid,
                 content,
@@ -141,26 +143,37 @@ export default function RequestDetailPage() {
     const requestId = Array.isArray(id) ? id[0] : id;
     
     const [request, setRequest] = useState<Request | null>(null);
-    const [requestDocRef, setRequestDocRef] = useState<any>(null);
+    const [requestDocRef, setRequestDocRef] = useState<DocumentReference | null>(null);
     const [isRequestLoading, setIsRequestLoading] = useState(true);
 
     useEffect(() => {
         const findRequest = async () => {
             if (!requestId || !firestore) return;
             setIsRequestLoading(true);
-            const requestsQuery = query(collectionGroup(firestore, 'requests'), where('__name__', '==', `*/${requestId}`));
-            const querySnapshot = await getDocs(requestsQuery);
+            
+            const requestsCollectionGroup = collectionGroup(firestore, 'requests');
+            const q = query(requestsCollectionGroup, where('__name__', 'like', `%/${requestId}`));
+            
+            try {
+                const querySnapshot = await getDocs(q);
 
-            if (!querySnapshot.empty) {
-                const docSnap = querySnapshot.docs[0];
-                const docData = docSnap.data() as Omit<Request, 'id'>;
-                setRequest({ ...docData, id: docSnap.id });
-                setRequestDocRef(docSnap.ref);
-            } else {
-                 toast({ variant: 'destructive', title: 'Error', description: 'Request not found.' });
-                 router.push('/marketplace');
+                const foundDoc = querySnapshot.docs.find(doc => doc.id === requestId);
+
+                if (foundDoc) {
+                    const docData = foundDoc.data() as Omit<Request, 'id'>;
+                    setRequest({ ...docData, id: foundDoc.id });
+                    setRequestDocRef(foundDoc.ref);
+                } else {
+                     toast({ variant: 'destructive', title: 'Error', description: 'Request not found.' });
+                     router.push('/marketplace');
+                }
+            } catch (error) {
+                console.error("Error finding request:", error);
+                toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch request details.' });
+                router.push('/marketplace');
+            } finally {
+                setIsRequestLoading(false);
             }
-            setIsRequestLoading(false);
         };
         findRequest();
     }, [requestId, firestore, router, toast]);
@@ -215,7 +228,7 @@ export default function RequestDetailPage() {
         try {
             await runTransaction(firestore, async (transaction) => {
                 const solverRef = doc(firestore, 'users', solutionToRate.solverId);
-                const solutionRef = doc(collection(requestDocRef, 'solutions'), solutionToRate.id);
+                const solutionRef = doc(requestDocRef, 'solutions', solutionToRate.id);
                 
                 const solverDoc = await transaction.get(solverRef);
                 if (!solverDoc.exists()) throw new Error("Solver not found");
@@ -360,3 +373,5 @@ export default function RequestDetailPage() {
         </div>
     );
 }
+
+    
