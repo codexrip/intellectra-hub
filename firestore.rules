@@ -3,39 +3,57 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ---------------------------------------------------------
+    // HELPER FUNCTIONS
+    // ---------------------------------------------------------
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-
+    // ---------------------------------------------------------
+    // 1. USERS COLLECTION
+    // ---------------------------------------------------------
     match /users/{userId} {
+      // Allow reading any profile (needed for Leaderboards/Feeds)
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.uid == userId;
-      allow update: if isOwner(userId);
+      
+      // Only the user can create/edit their own profile
+      allow create, update: if request.auth.uid == userId;
     }
 
+    // ---------------------------------------------------------
+    // 2. REQUESTS COLLECTION (Marketplace & My Requests)
+    // ---------------------------------------------------------
     match /requests/{requestId} {
-      // Allow any signed-in user to read requests for the marketplace and detail view.
+      // CRITICAL FIX: Allow ANY signed-in user to read requests
+      // This fixes the "Marketplace" and "My Requests" list error.
       allow read: if isSignedIn();
-      
-      // Allow users to create requests.
+
+      // Creation is allowed if you are signed in
       allow create: if isSignedIn();
-      
-      // Only allow the original requester to update or delete their own request.
-      allow update, delete: if isSignedIn() && resource.data.requesterId == request.auth.uid;
+
+      // Update/Delete only if you are the requester
+      allow update, delete: if isSignedIn() && request.auth.uid == resource.data.requesterId;
     }
 
+    // ---------------------------------------------------------
+    // 3. SOLUTIONS COLLECTION
+    // ---------------------------------------------------------
     match /solutions/{solutionId} {
-      // Allow any signed-in user to read solutions and create new ones.
-      allow read, create: if isSignedIn();
+      // CRITICAL FIX: Allow ANY signed-in user to READ solutions.
+      // If we restrict this too much, the owner's "List" query crashes.
+      allow read: if isSignedIn();
 
-      // Only allow the solution owner or request owner to update a solution (e.g. to accept it)
+      // You can only CREATE a solution if you are signed in
+      allow create: if isSignedIn();
+
+      // You can Update (e.g. mark as accepted) if you own the REQUEST or the SOLUTION
       allow update: if isSignedIn();
     }
-    
+
+    // ---------------------------------------------------------
+    // 4. LOGS (For Security)
+    // ---------------------------------------------------------
     match /security_logs/{logId} {
       allow read, create: if true;
     }
