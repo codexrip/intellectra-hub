@@ -32,7 +32,7 @@ export function Sidebar() {
           href="/dashboard"
           className="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full text-lg font-semibold text-primary-foreground md:h-8 md:w-8 md:text-base"
         >
-          <Image src="/intellectualogo.png" alt="Intellectra Hub Logo" width={32} height={32} />
+          <Image src="/il.png" alt="Intellectra Hub Logo" width={32} height={32} />
           <span className="sr-only">Intellectra Hub</span>
         </Link>
         <TooltipProvider>
