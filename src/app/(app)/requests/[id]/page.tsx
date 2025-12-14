@@ -13,14 +13,15 @@ import {
   runTransaction,
   serverTimestamp,
   deleteDoc,
-  where,
   increment,
   addDoc,
   getDocs,
   collectionGroup,
-  DocumentReference
+  DocumentReference,
+  Timestamp,
+  where
 } from 'firebase/firestore';
-import { useUser, useFirestore, useDoc, useCollection, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { useUser, useFirestore, useDoc, useCollection, useMemoFirebase } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Request, Solution, UserProfile } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -81,7 +82,7 @@ function FeedbackModal({ open, onOpenChange, onSubmit, solverName }: { open: boo
     );
 }
 
-function SolutionForm({ requestId, requesterId }: { requestId: string, requesterId: string }) {
+function SolutionForm({ request, requestDocRef }: { request: Request, requestDocRef: DocumentReference }) {
     const { user } = useUser();
     const firestore = useFirestore();
     const { toast } = useToast();
@@ -90,20 +91,22 @@ function SolutionForm({ requestId, requesterId }: { requestId: string, requester
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user || !content.trim() || !requesterId) return;
+        if (!user || !content.trim() || !requestDocRef) return;
         setLoading(true);
         try {
-            const solutionCollectionRef = collection(firestore, 'users', requesterId, 'requests', requestId, 'solutions');
-            addDocumentNonBlocking(solutionCollectionRef, {
-                requestId,
+            const solutionCollectionRef = collection(requestDocRef, 'solutions');
+            await addDoc(solutionCollectionRef, {
+                requestId: request.id,
                 solverId: user.uid,
                 content,
                 isAccepted: false,
                 createdAt: serverTimestamp(),
             });
+
             setContent('');
             toast({ title: 'Solution Submitted', description: 'Your solution has been posted.' });
         } catch (error) {
+            console.error("Error submitting solution:", error);
             toast({ variant: 'destructive', title: 'Error', description: 'Failed to submit solution.' });
         } finally {
             setLoading(false);
@@ -144,53 +147,54 @@ export default function RequestDetailPage() {
     
     const [request, setRequest] = useState<Request | null>(null);
     const [requestDocRef, setRequestDocRef] = useState<DocumentReference | null>(null);
-    const [isRequestLoading, setIsRequestLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
+        if (!requestId || !firestore) return;
+        
+        setIsLoading(true);
         const findRequestDoc = async () => {
-            if (!requestId || !firestore) return;
-            setIsRequestLoading(true);
-
-            // Use a collection group query to find the request across all users.
-            const requestsCollection = collectionGroup(firestore, 'requests');
+            // This is a simplified approach for the demo.
+            // A more scalable solution in a real app might involve a separate top-level lookup collection.
+            const usersCollection = collection(firestore, 'users');
+            const usersSnapshot = await getDocs(usersCollection);
             
-            try {
-                const querySnapshot = await getDocs(requestsCollection);
+            let foundRequest = false;
 
-                if (querySnapshot.empty) {
-                    toast({ variant: 'destructive', title: 'Error', description: 'Request not found.' });
-                    router.push('/marketplace');
-                    return;
+            for (const userDoc of usersSnapshot.docs) {
+                const requestRef = doc(firestore, 'users', userDoc.id, 'requests', requestId);
+                const requestSnap = await getDoc(requestRef);
+                if (requestSnap.exists()) {
+                    setRequestDocRef(requestRef);
+                    setRequest({ ...requestSnap.data(), id: requestSnap.id } as Request);
+                    foundRequest = true;
+                    break; 
                 }
-
-                const requestDoc = querySnapshot.docs.find(doc => doc.id === requestId);
-
-                if (!requestDoc) {
-                    toast({ variant: 'destructive', title: 'Error', description: 'Request not found.' });
-                    router.push('/marketplace');
-                    return;
-                }
-
-                setRequestDocRef(requestDoc.ref);
-                const unsub = onSnapshot(requestDoc.ref, (doc) => {
-                    if (doc.exists()) {
-                        setRequest({ ...doc.data(), id: doc.id } as Request);
-                    }
-                });
-
-                return () => unsub();
-
-            } catch (error) {
-                console.error("Error fetching request:", error);
-                toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch request details.' });
-            } finally {
-                setIsRequestLoading(false);
             }
+
+            if (!foundRequest) {
+                toast({ variant: 'destructive', title: 'Error', description: 'Request not found.' });
+                router.push('/marketplace');
+            }
+            setIsLoading(false);
         };
         
         findRequestDoc();
 
     }, [requestId, firestore, router, toast]);
+
+
+    // Listener for real-time updates on the request itself (e.g., status changes)
+    useEffect(() => {
+        if (!requestDocRef) return;
+        const unsub = onSnapshot(requestDocRef, (doc) => {
+            if (doc.exists()) {
+                setRequest({ ...doc.data(), id: doc.id } as Request);
+            }
+        });
+        return () => unsub();
+    }, [requestDocRef]);
+
 
     const solutionsQuery = useMemoFirebase(() => {
         if (!requestDocRef) return null;
@@ -228,7 +232,7 @@ export default function RequestDetailPage() {
     }, [solutions, firestore]);
 
     const isOwner = user?.uid === request?.requesterId;
-    const isLoading = isRequestLoading || areSolutionsLoading;
+    const hasSubmitted = solutions?.some(s => s.solverId === user?.uid);
 
     const handleMarkAsCompleted = async (solution: Solution & {id: string}) => {
         setSolutionToRate(solution);
@@ -264,32 +268,33 @@ export default function RequestDetailPage() {
                     walletBalance: increment(walletUpdate),
                     xp: increment(reward),
                     level: newLevel,
-                    rating: rating // For simplicity, we just set the new rating. A real app would average it.
+                    // A real app would average the rating, but for a demo, this is fine.
+                    rating: (solverProfile.rating * (solverProfile.level -1) + rating) / solverProfile.level 
                 });
             });
     
             toast({ title: 'Request Completed!', description: `Reward sent and feedback recorded.` });
             
         } catch (error) {
-            console.error(error);
+            console.error("Failed to complete request transaction:", error);
             toast({ variant: 'destructive', title: 'Error', description: 'Failed to complete request.' });
         }
         setSolutionToRate(null);
     };
     
     const handleDeleteRequest = async () => {
-        if (!request || !requestDocRef) return;
+        if (!requestDocRef) return;
         try {
             await deleteDoc(requestDocRef);
             toast({ title: 'Request Deleted', description: 'Your request has been removed.' });
             router.push('/my-requests');
         } catch (error) {
+            console.error("Error deleting request:", error);
             toast({ variant: 'destructive', title: 'Error', description: 'Failed to delete request.' });
         }
     };
 
-    if (isLoading) return <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
-    if (!request) return null;
+    if (isLoading || !request) return <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
 
     const rewardAmount = Math.round(request.cost * REWARD_PERCENTAGE);
 
@@ -310,7 +315,7 @@ export default function RequestDetailPage() {
                             <Badge variant="secondary">{request.type}</Badge>
                             <CardTitle className="mt-2 text-3xl font-headline">{request.title}</CardTitle>
                             <CardDescription className="mt-1">
-                                Posted {request.createdAt ? formatDistanceToNow(request.createdAt.toDate(), { addSuffix: true }) : ''}
+                                Posted {request.createdAt ? formatDistanceToNow(new Date((request.createdAt as unknown as Timestamp).seconds * 1000), { addSuffix: true }) : ''}
                             </CardDescription>
                         </div>
                         <div className="flex flex-col items-start sm:items-end gap-2 shrink-0">
@@ -351,7 +356,11 @@ export default function RequestDetailPage() {
 
             <div className="space-y-6">
                 <h2 className="text-2xl font-bold font-headline">Solutions ({hydratedSolutions.length})</h2>
-                {hydratedSolutions.length > 0 ? (
+                {areSolutionsLoading ? (
+                     <div className="flex justify-center items-center h-24">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    </div>
+                ) : hydratedSolutions.length > 0 ? (
                     hydratedSolutions.map(solution => (
                         <Card key={solution.id} className={solution.isAccepted ? "border-primary bg-primary/5" : ""}>
                             <CardHeader className="flex flex-row justify-between items-start">
@@ -362,7 +371,7 @@ export default function RequestDetailPage() {
                                     </Avatar>
                                     <div>
                                         <p className="font-semibold">{solution.solver?.displayName}</p>
-                                        <p className="text-xs text-muted-foreground">{solution.createdAt ? formatDistanceToNow(solution.createdAt.toDate(), { addSuffix: true }) : ''}</p>
+                                        <p className="text-xs text-muted-foreground">{solution.createdAt ? formatDistanceToNow(new Date((solution.createdAt as unknown as Timestamp).seconds * 1000), { addSuffix: true }) : ''}</p>
                                     </div>
                                 </div>
                                 {solution.isAccepted && <Badge className="bg-green-500 text-white"><CheckCircle className="mr-2 h-4 w-4"/>Accepted</Badge>}
@@ -382,9 +391,9 @@ export default function RequestDetailPage() {
                     <p className="text-muted-foreground text-center py-8">No solutions have been submitted yet.</p>
                 )}
             </div>
-
-            {!isOwner && request.status === 'Open' && !solutions?.some(s => s.solverId === user?.uid) && (
-                <SolutionForm requestId={requestId} requesterId={request.requesterId} />
+            
+            {requestDocRef && !isOwner && request.status === 'Open' && !hasSubmitted && (
+                <SolutionForm request={request} requestDocRef={requestDocRef} />
             )}
         </div>
     );
