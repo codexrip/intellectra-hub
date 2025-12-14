@@ -145,7 +145,7 @@ export function LoginForm() {
   }
 
   return (
-    <Card className="w-full max-w-sm">
+    <Card className="w-full max-w-sm mx-4 sm:mx-0">
       <CardHeader>
         <CardTitle className="text-2xl font-headline">Login</CardTitle>
         <CardDescription>Enter your email below to login to your account.</CardDescription>

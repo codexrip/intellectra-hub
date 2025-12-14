@@ -82,7 +82,7 @@ export function RegisterForm() {
   }
 
   return (
-    <Card className="w-full max-w-sm">
+    <Card className="w-full max-w-sm mx-4 sm:mx-0">
       <CardHeader>
         <CardTitle className="text-2xl font-headline">Create an Account</CardTitle>
         <CardDescription>Enter your information to create an account.</CardDescription>

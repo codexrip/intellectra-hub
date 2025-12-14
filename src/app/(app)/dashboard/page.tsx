@@ -70,13 +70,13 @@ export default function DashboardPage() {
               <CardDescription>Jump right back into action.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <Button asChild size="lg">
+              <Button asChild size="lg" className="w-full">
                 <Link href="/requests/new">
                   <PlusCircle className="mr-2 h-5 w-5" />
                   Create a New Request
                 </Link>
               </Button>
-              <Button asChild variant="outline" size="lg">
+              <Button asChild variant="outline" size="lg" className="w-full">
                 <Link href="/marketplace">
                   <Store className="mr-2 h-5 w-5" />
                   Browse Marketplace

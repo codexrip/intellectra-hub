@@ -105,7 +105,7 @@ export default function WalletPage() {
                         <p className="text-5xl font-bold font-headline tracking-tighter">{profile?.walletBalance.toFixed(2)}</p>
                         <p className="text-lg text-muted-foreground">Coins</p>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <Button size="lg" onClick={handleBuyTokens} disabled={!!loading}>
                             {loading === 'buy' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <PlusCircle className="mr-2 h-5 w-5" />}
                             Buy 100 Tokens

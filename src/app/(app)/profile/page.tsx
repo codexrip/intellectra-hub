@@ -70,12 +70,12 @@ export default function ProfilePage() {
             <h1 className="text-3xl font-bold font-headline mb-6">My Profile</h1>
             <Card className="max-w-2xl mx-auto">
                 <CardHeader>
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-col sm:flex-row items-center gap-4">
                         <Avatar className="h-20 w-20 border-2 border-primary">
                             <AvatarImage src={photoURL} alt={displayName} />
                             <AvatarFallback className="text-3xl">{displayName.charAt(0)}</AvatarFallback>
                         </Avatar>
-                        <div>
+                        <div className="text-center sm:text-left">
                             <CardTitle className="text-2xl">{profile.displayName}</CardTitle>
                             <CardDescription>{profile.email}</CardDescription>
                             {profile.isFrozen && <Badge variant="destructive" className="mt-2">Account Frozen</Badge>}

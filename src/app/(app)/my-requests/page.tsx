@@ -37,9 +37,9 @@ export default function MyRequestsPage() {
     
     return (
         <div className="container mx-auto p-0">
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold font-headline">My Requests</h1>
-                <Button asChild>
+            <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+                <h1 className="text-3xl font-bold font-headline self-start sm:self-center">My Requests</h1>
+                <Button asChild className="w-full sm:w-auto">
                     <Link href="/requests/new">
                         <PlusCircle className="mr-2 h-4 w-4" />
                         New Request
