@@ -186,7 +186,7 @@ export default function NewRequestPage() {
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select a request type" />
-                            </Trigger>
+                            </SelectTrigger>
                           </FormControl>
                           <SelectContent>
                             {requestTypes.map(type => (
@@ -208,7 +208,7 @@ export default function NewRequestPage() {
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select an urgency level" />
-                            </Trigger>
+                            </SelectTrigger>
                           </FormControl>
                           <SelectContent>
                             {urgencies.map(urgency => (
