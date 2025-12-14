@@ -9,7 +9,7 @@ export default function AuthLayout({
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <div className="mb-8">
         <Image 
-          src="/logo.png"
+          src="/intellectualogo.png"
           alt="Intellectra Hub Logo"
           width={200}
           height={50}
