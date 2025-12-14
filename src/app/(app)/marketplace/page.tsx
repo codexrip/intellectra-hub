@@ -1,8 +1,8 @@
 
 "use client";
 
-import { collection, query, where, orderBy, Timestamp } from 'firebase/firestore';
-import { useState, useMemo, useEffect } from 'react';
+import { collection, query, where, Timestamp } from 'firebase/firestore';
+import { useState, useEffect } from 'react';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { Request, RequestType } from '@/lib/types';
 import { RequestCard } from '@/components/requests/RequestCard';
@@ -18,27 +18,27 @@ export default function MarketplacePage() {
 
     const requestsQuery = useMemoFirebase(() => {
         const requestsRef = collection(firestore, 'requests');
-        let q = query(requestsRef, where('status', '==', 'Open'));
-
-        if (filter !== 'All') {
-            q = query(q, where('type', '==', filter));
-        }
-        
-        return q;
-    }, [firestore, filter]);
+        return query(requestsRef, where('status', '==', 'Open'));
+    }, [firestore]);
 
     const { data: requests, isLoading } = useCollection<Request>(requestsQuery);
 
     useEffect(() => {
         if(requests) {
-            const sorted = [...requests].sort((a, b) => {
+            // Client-side filtering and sorting
+            const filtered = filter === 'All'
+                ? requests
+                : requests.filter(req => req.type === filter);
+            
+            const sorted = [...filtered].sort((a, b) => {
                 const dateA = (a.createdAt as Timestamp)?.toMillis() || 0;
                 const dateB = (b.createdAt as Timestamp)?.toMillis() || 0;
                 return dateB - dateA;
             });
+
             setSortedRequests(sorted);
         }
-    }, [requests]);
+    }, [requests, filter]);
 
     return (
         <div className="container mx-auto p-0">
@@ -78,3 +78,4 @@ export default function MarketplacePage() {
             )}
         </div>
     );
+}
