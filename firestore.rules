@@ -45,17 +45,8 @@ service cloud.firestore {
     function isOwner(userId) {
       return request.auth.uid == userId;
     }
-
-    // Checks ownership for an existing document. Used for update/delete operations.
-    function isExistingOwner(userId) {
-      return isOwner(userId) && resource != null;
-    }
     
-    // Checks if the requesting user is the owner of an existing solution document.
-    function isSolutionOwner() {
-    	return resource != null && request.auth.uid == resource.data.solverId;
-    }
-    
+    // Checks if the user is the owner of the request document associated with a solution.
     function isRequestOwner(requestId) {
         let requestDoc = get(/databases/$(database)/documents/requests/$(requestId));
         return request.auth.uid == requestDoc.data.requesterId;
@@ -71,10 +62,9 @@ service cloud.firestore {
      * @principle Restricts access to a user's own data tree and prevents user enumeration.
      */
     match /users/{userId} {
-      allow get: if isSignedIn();
+      allow get, update: if isOwner(userId);
       allow list: if false;
       allow create: if isOwner(userId) && request.resource.data.uid == userId;
-      allow update: if isOwner(userId) && request.resource.data.uid == resource.data.uid;
       allow delete: if false;
     }
 
@@ -107,7 +97,9 @@ service cloud.firestore {
     match /solutions/{solutionId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.solverId == request.auth.uid;
-      allow update: if (isRequestOwner(request.resource.data.requestId) || (isSignedIn() && request.auth.uid == resource.data.solverId));
+      // Allow update if user is the request owner (to accept) or the solution owner (to edit)
+      allow update: if isSignedIn() && (isRequestOwner(request.resource.data.requestId) || request.auth.uid == resource.data.solverId);
+      // Only allow the solution owner to delete their own solution
       allow delete: if isSignedIn() && request.auth.uid == resource.data.solverId;
     }
     
@@ -120,8 +112,7 @@ service cloud.firestore {
      * @principle Secures sensitive, admin-only data by prohibiting any and all client access.
      */
     match /security_logs/{logId} {
-      allow read: if false;
-      allow write: if false;
+      allow read, write: if false;
     }
   }
 }
