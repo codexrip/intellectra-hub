@@ -16,6 +16,7 @@ export default function MyRequestsPage() {
 
     const userRequestsQuery = useMemoFirebase(() => {
         if (!user) return null;
+        // Corrected: Query the top-level 'requests' collection
         const requestsRef = collection(firestore, 'requests');
         return query(
             requestsRef,

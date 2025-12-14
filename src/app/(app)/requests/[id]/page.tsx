@@ -14,6 +14,7 @@ import {
   serverTimestamp,
   increment,
   Timestamp,
+  orderBy
 } from 'firebase/firestore';
 import { useUser, useFirestore, useDoc, useCollection, useMemoFirebase } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
@@ -115,7 +116,7 @@ function SolutionForm({ request, onSubmit }: { request: Request, onSubmit: (cont
 
 export default function RequestDetailPage() {
     const { id } = useParams();
-    const { user, profile: currentUserProfile } = useUser();
+    const { user } = useUser();
     const firestore = useFirestore();
     const { toast } = useToast();
     const router = useRouter();
@@ -125,34 +126,40 @@ export default function RequestDetailPage() {
     
     const requestDocRef = useMemoFirebase(() => {
         if (!requestId || !firestore) return null;
+        // Corrected: Fetch from top-level 'requests' collection
         return doc(firestore, 'requests', requestId);
     }, [requestId, firestore]);
     
     const { data: request, isLoading: isRequestLoading } = useDoc<Request>(requestDocRef);
 
+    const userProfileRef = useMemoFirebase(() => {
+        if (!user) return null;
+        return doc(firestore, 'users', user.uid);
+    }, [firestore, user]);
+
+    const { data: currentUserProfile } = useDoc<UserProfile>(userProfileRef);
+
     const solutionsQuery = useMemoFirebase(() => {
         if (!requestId || !firestore) return null;
+        // Corrected: Query top-level 'solutions' collection
         return query(collection(firestore, 'solutions'), where('requestId', '==', requestId), orderBy('createdAt', 'desc'));
     }, [requestId, firestore]);
 
     const { data: solutions, isLoading: areSolutionsLoading } = useCollection<Solution>(solutionsQuery);
     
-    const [hydratedSolutions, setHydratedSolutions] = useState<(Solution & {solver?: {photoURL: string, displayName: string}})[]>([]);
+    const [hydratedSolutions, setHydratedSolutions] = useState<(Solution & {solverProfile?: UserProfile})[]>([]);
     
     useEffect(() => {
-        if (solutions) {
+        if (solutions && firestore) {
             const fetchSolvers = async () => {
                 const hydrated = await Promise.all(solutions.map(async (solution) => {
-                    const solverDoc = await doc(firestore, 'users', solution.solverId);
-                    const solverSnap = await runTransaction(firestore, async t => t.get(solverDoc));
+                    const solverDocRef = doc(firestore, 'users', solution.solverId);
+                    // Using a transaction is overkill here, a simple get is fine.
+                    const solverSnap = await runTransaction(firestore, t => t.get(solverDocRef));
                     if(solverSnap.exists()){
-                        const solverProfile = solverSnap.data() as UserProfile;
                         return {
                             ...solution,
-                            solver: {
-                                displayName: solverProfile.displayName,
-                                photoURL: solverProfile.photoURL,
-                            }
+                            solverProfile: solverSnap.data() as UserProfile
                         }
                     }
                     return solution;
@@ -180,6 +187,7 @@ export default function RequestDetailPage() {
         if (!user || !currentUserProfile || !request) return;
 
         try {
+            // Corrected: Add to top-level 'solutions' collection
             await addDoc(collection(firestore, 'solutions'), {
                 requestId: request.id,
                 solverId: user.uid,
@@ -210,7 +218,8 @@ export default function RequestDetailPage() {
         try {
             await runTransaction(firestore, async (transaction) => {
                 const solverRef = doc(firestore, 'users', solutionToRate.solverId);
-                const solutionRef = doc(firestore, 'solutions', solutionToRate.id);
+                // Corrected: solution doc from top-level collection
+                const solutionRef = doc(firestore, 'solutions', solutionToRate.id); 
                 
                 const solverDoc = await transaction.get(solverRef);
                 if (!solverDoc.exists()) throw new Error("Solver not found");
@@ -349,7 +358,7 @@ export default function RequestDetailPage() {
 
             {/* --- Solutions Section --- */}
             <div className="space-y-6">
-                <h2 className="text-2xl font-bold font-headline">Solutions ({hydratedSolutions.length})</h2>
+                <h2 className="text-2xl font-bold font-headline">Solutions ({solutions?.length || 0})</h2>
                 {areSolutionsLoading ? (
                      <div className="flex justify-center items-center h-24"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
                 ) : hydratedSolutions.length > 0 ? (
@@ -358,11 +367,11 @@ export default function RequestDetailPage() {
                             <CardHeader className="flex flex-row justify-between items-start">
                                 <div className="flex items-center gap-3">
                                     <Avatar>
-                                        <AvatarImage src={solution.solver?.photoURL} />
-                                        <AvatarFallback>{solution.solver?.displayName?.charAt(0)}</AvatarFallback>
+                                        <AvatarImage src={solution.solverProfile?.photoURL} />
+                                        <AvatarFallback>{solution.solverName?.charAt(0)}</AvatarFallback>
                                     </Avatar>
                                     <div>
-                                        <p className="font-semibold">{solution.solver?.displayName}</p>
+                                        <p className="font-semibold">{solution.solverName}</p>
                                         <p className="text-xs text-muted-foreground">{solution.createdAt ? formatDistanceToNow(new Date((solution.createdAt as unknown as Timestamp).seconds * 1000), { addSuffix: true }) : ''}</p>
                                     </div>
                                 </div>
