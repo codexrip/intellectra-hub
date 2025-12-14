@@ -172,7 +172,14 @@ export default function RequestDetailPage() {
                 }
 
                 setRequestDocRef(requestDoc.ref);
-                setRequest({ ...requestDoc.data(), id: requestDoc.id } as Request);
+                const unsub = onSnapshot(requestDoc.ref, (doc) => {
+                    if (doc.exists()) {
+                        setRequest({ ...doc.data(), id: doc.id } as Request);
+                    }
+                });
+
+                return () => unsub();
+
             } catch (error) {
                 console.error("Error fetching request:", error);
                 toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch request details.' });
@@ -263,10 +270,6 @@ export default function RequestDetailPage() {
     
             toast({ title: 'Request Completed!', description: `Reward sent and feedback recorded.` });
             
-            // Manually update local request state after transaction
-            setRequest(prev => prev ? {...prev, status: 'Completed'} : null);
-            setHydratedSolutions(prev => prev.map(sol => sol.id === solutionToRate.id ? {...sol, isAccepted: true} : sol));
-
         } catch (error) {
             console.error(error);
             toast({ variant: 'destructive', title: 'Error', description: 'Failed to complete request.' });
@@ -385,5 +388,6 @@ export default function RequestDetailPage() {
             )}
         </div>
     );
+}
 
     
