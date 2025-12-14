@@ -1,42 +1,127 @@
+/**
+ * Core Philosophy: This ruleset enforces a strict user-ownership model. All core application
+ * data, such as user profiles, requests, and solutions, is stored within a user-specific
+ * data tree. This ensures that users can only access and modify their own information,
+ * providing a strong security foundation.
+ *
+ * Data Structure: The database is structured hierarchically, with most data nested under the
+ * `/users/{userId}` collection. This path-based ownership makes authorization logic simple and
+ * performant. A separate top-level collection, `/security_logs`, is used for administrative
+ * data and is completely inaccessible to clients.
+ *
+ * Key Security Decisions:
+ * - Strict Ownership: Access to any document within `/users/{userId}` and its subcollections
+ *   is granted only to the authenticated user matching `{userId}`.
+ * - No User Listing: To protect user privacy, listing the top-level `/users` collection is
+ *   disallowed. Users can only fetch their own profile document.
+ * - Client-Side Lockdown: The `/security_logs` collection is fully locked down from all client
+ *   read and write operations. This type of sensitive data should only be managed by a
+ *   trusted backend server environment.
+ * - Collaborative Solutions: The `solutions` subcollection has hybrid permissions. The original
+ *   request owner can read all solutions and accept one, while the user who submitted a
+ *   solution (the solver) has permission to create, update, or delete their own submission.
+ *
+ * Denormalization for Authorization: The rules rely on denormalized owner IDs (`requesterId` in
+ * requests, `solverId` in solutions) to perform authorization checks without needing costly
+ * `get()` calls to other documents. This is critical for performance and scalability.
+ * For example, a rule on a `solution` document can check the `solverId` field directly rather
+ * than looking up the parent request or user document.
+ *
+ * Structural Segregation: User-specific private data (`requests`, `solutions`) is segregated
+ * into subcollections under the user's main document. This pattern naturally prevents data
+ * leakage and makes list operations secure by default, as a query for a user's requests can
+ * only ever target their own subcollection.
+ */
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-    // By default, deny all reads and writes
-    match /{document=**} {
-      allow read, write: if false;
+
+    // Helper functions for reusable logic
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    // Allow users to read their own profile
+    // Checks if the requesting user's UID matches the document's owner ID from the path.
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // Checks ownership for an existing document. Used for update/delete operations.
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+    
+    // Checks if the requesting user is the owner of an existing solution document.
+    function isSolutionOwner() {
+    	return resource != null && request.auth.uid == resource.data.solverId;
+    }
+
+    /**
+     * @description Controls access to user profile documents.
+     * @path /users/{userId}
+     * @allow (get) An authenticated user retrieves their own profile. auth.uid: "user_abc", path: /users/user_abc
+     * @allow (create) A new user creates their own profile document. auth.uid: "user_abc", path: /users/user_abc
+     * @deny (get) A user tries to read another user's profile. auth.uid: "user_abc", path: /users/user_xyz
+     * @deny (list) Any user tries to list all documents in the /users collection.
+     * @principle Restricts access to a user's own data tree and prevents user enumeration.
+     */
     match /users/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null && request.auth.uid == userId;
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId) && request.resource.data.uid == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.uid == resource.data.uid;
       allow delete: if false;
     }
-    
-    // Allow any authenticated user to read requests
-    match /requests/{requestId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && request.resource.data.requesterId == request.auth.uid;
-      // Only the requester can update the status or delete a request
-      allow update: if request.auth != null && resource.data.requesterId == request.auth.uid;
-      allow delete: if request.auth != null && resource.data.requesterId == request.auth.uid;
-    }
-    
-    // Allow any authenticated user to read solutions
-    // Allow solver to create a solution
-    // Allow requester to update isAccepted field
-    match /solutions/{solutionId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && request.resource.data.solverId == request.auth.uid;
-      allow update: if request.auth != null && get(/databases/$(database)/documents/requests/$(resource.data.requestId)).data.requesterId == request.auth.uid;
+
+    /**
+     * @description Controls access to user-created requests, which are nested under the user's profile.
+     * @path /users/{userId}/requests/{requestId}
+     * @allow (create) An authenticated user creates a new request for themselves. auth.uid: "user_abc", path: /users/user_abc/requests/req_123
+     * @allow (list) A user lists all of their own requests. auth.uid: "user_abc", path: /users/user_abc/requests
+     * @deny (get) A user tries to read a request belonging to another user. auth.uid: "user_abc", path: /users/user_xyz/requests/req_456
+     * @deny (create) A user tries to create a request under another user's ID. auth.uid: "user_abc", path: /users/user_xyz/requests/req_123
+     * @principle Enforces strict document ownership within a user's private subcollection.
+     */
+    match /users/{userId}/requests/{requestId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.requesterId == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.requesterId == resource.data.requesterId;
+      allow delete: if isExistingOwner(userId);
     }
 
-    // Security logs can be created by anyone, but not read, updated or deleted
+    /**
+     * @description Controls access to solutions submitted for a user's request. This is a collaborative collection.
+     * @path /users/{userId}/requests/{requestId}/solutions/{solutionId}
+     * @allow (create) Any signed-in user submits a solution to a request. auth.uid: "solver_789", path: /users/user_abc/requests/req_123/solutions/sol_456
+     * @allow (get) The request owner reads a solution submitted for their request. auth.uid: "user_abc", path: /users/user_abc/requests/req_123/solutions/sol_456
+     * @allow (list) The request owner lists all solutions for their request. auth.uid: "user_abc", path: /users/user_abc/requests/req_123/solutions
+     * @deny (list) A user who submitted a solution tries to list other solutions. auth.uid: "solver_789", path: /users/user_abc/requests/req_123/solutions
+     * @deny (delete) The request owner tries to delete a solution. auth.uid: "user_abc", path: /users/user_abc/requests/req_123/solutions/sol_456
+     * @principle Implements shared access where a resource owner (requester) and contributors (solvers) have different permissions.
+     */
+    match /users/{userId}/requests/{requestId}/solutions/{solutionId} {
+      allow get: if isOwner(userId) || isSolutionOwner();
+      allow list: if isOwner(userId);
+      allow create: if isSignedIn() && request.resource.data.solverId == request.auth.uid && request.resource.data.requestId == requestId;
+      allow update: if (isOwner(userId) || isSolutionOwner()) && resource != null && request.resource.data.solverId == resource.data.solverId && request.resource.data.requestId == resource.data.requestId;
+      allow delete: if isSolutionOwner();
+    }
+    
+    /**
+     * @description Locks down the security logs collection from all client-side access.
+     * @path /security_logs/{logId}
+     * @allow N/A - All operations are denied.
+     * @deny (get) Any user attempts to read a security log.
+     * @deny (create) Any user attempts to write a security log.
+     * @principle Secures sensitive, admin-only data by prohibiting any and all client access.
+     */
     match /security_logs/{logId} {
-      allow read, update, delete: if false;
-      allow create: if true;
+      allow get: if false;
+      allow list: if false;
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
   }
 }

@@ -1,18 +1,19 @@
 {
   "entities": {
-    "UserProfile": {
-      "title": "User Profile",
-      "description": "Represents a user's profile in the system.",
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
       "type": "object",
+      "description": "Represents a user in the Intellectra Hub platform.",
       "properties": {
         "uid": {
           "type": "string",
-          "description": "Primary Key."
+          "description": "Unique identifier for the user. (Primary Key)"
         },
         "email": {
           "type": "string",
-          "format": "email",
-          "description": "User's email address."
+          "description": "User's email address.",
+          "format": "email"
         },
         "displayName": {
           "type": "string",
@@ -20,148 +21,249 @@
         },
         "photoURL": {
           "type": "string",
-          "format": "uri",
-          "description": "URL of the user's profile picture."
+          "description": "URL of the user's profile photo.",
+          "format": "uri"
         },
         "walletBalance": {
           "type": "number",
-          "description": "Defaults to 0."
+          "description": "User's wallet balance."
         },
         "xp": {
           "type": "number",
-          "description": "Experience points (Defaults to 0)."
+          "description": "User's experience points."
         },
         "level": {
           "type": "number",
-          "description": "Current Level (Defaults to 1)."
+          "description": "User's current level."
         },
         "rating": {
           "type": "number",
-          "description": "Average feedback score (0-10)."
+          "description": "User's average feedback score (0-10)."
         },
         "isFrozen": {
           "type": "boolean",
-          "description": "Defaults to false."
+          "description": "Indicates whether the user account is frozen."
         },
         "frozenUntil": {
-          "type": ["string", "null"],
+          "type": "string",
+          "description": "Timestamp indicating when the user account will be unfrozen, or null if not frozen.",
           "format": "date-time",
-          "description": "Timestamp until which the account is frozen."
+          "items": {
+            "type": "string"
+          }
         }
       },
-      "required": ["uid", "email", "displayName"]
+      "required": [
+        "uid",
+        "email",
+        "displayName",
+        "photoURL",
+        "walletBalance",
+        "xp",
+        "level",
+        "rating",
+        "isFrozen"
+      ]
     },
     "Request": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Request",
-      "description": "A request made by a user for some work.",
       "type": "object",
+      "description": "Represents a request created by a user in the Intellectra Hub platform.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Auto-generated."
+          "description": "Unique identifier for the request. (Primary Key)"
         },
         "requesterId": {
           "type": "string",
-          "description": "Link to users.uid."
+          "description": "Reference to User who created the request. (Relationship: User 1:N Request)"
         },
         "title": {
-          "type": "string"
+          "type": "string",
+          "description": "Title of the request."
         },
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "Description of the request."
         },
         "urgency": {
           "type": "string",
-          "enum": ["Low", "Medium", "High", "Extreme"]
+          "description": "Urgency level of the request ('Low', 'Medium', 'High', 'Extreme')."
         },
         "type": {
           "type": "string",
-          "enum": ["Project Material", "Collaboration", "Teaching Material", "Others"]
+          "description": "Type of the request ('Project Material', 'Collaboration', 'Teaching Material', 'Others')."
         },
         "cost": {
-          "type": "number"
+          "type": "number",
+          "description": "Calculated cost of the request."
         },
         "status": {
           "type": "string",
-          "enum": ["Open", "Closed", "Completed"]
+          "description": "Status of the request ('Open', 'Closed', 'Completed')."
         },
         "createdAt": {
           "type": "string",
+          "description": "Timestamp indicating when the request was created.",
           "format": "date-time"
         }
       },
-      "required": ["requesterId", "title", "description", "urgency", "type", "cost", "status", "createdAt"]
+      "required": [
+        "id",
+        "requesterId",
+        "title",
+        "description",
+        "urgency",
+        "type",
+        "cost",
+        "status",
+        "createdAt"
+      ]
     },
     "Solution": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Solution",
-      "description": "A solution submitted for a request.",
       "type": "object",
+      "description": "Represents a solution submitted for a request in the Intellectra Hub platform.",
       "properties": {
         "requestId": {
-          "type": "string"
+          "type": "string",
+          "description": "Reference to the Request this solution is for. (Relationship: Request 1:N Solution)"
         },
         "solverId": {
-          "type": "string"
+          "type": "string",
+          "description": "Reference to the User who submitted the solution. (Relationship: User 1:N Solution)"
         },
         "content": {
-          "type": "string"
+          "type": "string",
+          "description": "Content of the solution."
         },
         "isAccepted": {
-          "type": "boolean"
-        },
-        "createdAt": {
+          "type": "boolean",
+          "description": "Indicates whether the solution has been accepted."
+        }
+      },
+      "required": [
+        "requestId",
+        "solverId",
+        "content",
+        "isAccepted"
+      ]
+    },
+    "SecurityLog": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "SecurityLog",
+      "type": "object",
+      "description": "Represents security logs for user login attempts in the Intellectra Hub platform.",
+      "properties": {
+        "email": {
           "type": "string",
+          "description": "User's email address associated with the login attempt.",
+          "format": "email"
+        },
+        "failedAttempts": {
+          "type": "number",
+          "description": "Number of failed login attempts."
+        },
+        "lastAttemptTime": {
+          "type": "string",
+          "description": "Timestamp of the last login attempt.",
           "format": "date-time"
         }
       },
-      "required": ["requestId", "solverId", "content", "isAccepted", "createdAt"]
-    },
-    "SecurityLog": {
-        "title": "Security Log",
-        "description": "Logs for security related events.",
-        "type": "object",
-        "properties": {
-            "email": {
-                "type": "string"
-            },
-            "failedAttempts": {
-                "type": "number"
-            },
-            "lastAttemptTime": {
-                "type": "string",
-                "format": "date-time"
-            }
-        },
-        "required": ["email", "failedAttempts", "lastAttemptTime"]
+      "required": [
+        "email",
+        "failedAttempts",
+        "lastAttemptTime"
+      ]
     }
   },
   "auth": {
-    "providers": ["email"]
+    "providers": [
+      "password",
+      "anonymous"
+    ]
   },
   "firestore": {
-    "/users/{userId}": {
-      "schema": {
-        "$ref": "#/entities/UserProfile"
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profiles. The document ID is the user's UID.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique ID of the user (Firebase Auth UID)."
+            }
+          ]
+        }
       },
-      "description": "Stores user profile information."
-    },
-    "/requests/{requestId}": {
-      "schema": {
-        "$ref": "#/entities/Request"
+      {
+        "path": "/users/{userId}/requests/{requestId}",
+        "definition": {
+          "entityName": "Request",
+          "schema": {
+            "$ref": "#/backend/entities/Request"
+          },
+          "description": "Stores requests created by a specific user. Includes denormalized 'requesterId' for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique ID of the user who created the request."
+            },
+            {
+              "name": "requestId",
+              "description": "The unique ID of the request."
+            }
+          ]
+        }
       },
-      "description": "Stores user-created requests."
-    },
-    "/solutions/{solutionId}": {
-      "schema": {
-        "$ref": "#/entities/Solution"
+      {
+        "path": "/users/{userId}/requests/{requestId}/solutions/{solutionId}",
+        "definition": {
+          "entityName": "Solution",
+          "schema": {
+            "$ref": "#/backend/entities/Solution"
+          },
+          "description": "Stores solutions submitted for a specific request by a user. Includes denormalized 'solverId' for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique ID of the user who created the request."
+            },
+            {
+              "name": "requestId",
+              "description": "The unique ID of the request."
+            },
+            {
+              "name": "solutionId",
+              "description": "The unique ID of the solution."
+            }
+          ]
+        }
       },
-      "description": "Stores solutions submitted by users for requests."
-    },
-    "/security_logs/{logId}": {
-        "schema": {
-            "$ref": "#/entities/SecurityLog"
-        },
-        "description": "Stores security logs for failed login attempts."
-    }
+      {
+        "path": "/security_logs/{logId}",
+        "definition": {
+          "entityName": "SecurityLog",
+          "schema": {
+            "$ref": "#/backend/entities/SecurityLog"
+          },
+          "description": "Stores security logs for user login attempts.",
+          "params": [
+            {
+              "name": "logId",
+              "description": "The unique ID of the security log entry."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore data structure is designed to support the Intellectra Hub application, focusing on user profiles, requests, solutions, and security logs. The structure emphasizes Authorization Independence by denormalizing data where necessary, particularly for collaborative data access. Segregation is used to manage different types of data with varying security needs, and Access Modeling employs path-based ownership for user-related data and membership maps for collaborative scenarios.\n\nUsers are stored in the `/users/{uid}` collection, enabling easy access to user-specific data. Requests, being owned by users, are stored in `/users/{userId}/requests/{requestId}`, ensuring clear ownership and simplified security rules. Solutions are nested under requests in `/users/{userId}/requests/{requestId}/solutions/{solutionId}` to maintain the relationship between requests and solutions.\n\nThe `/security_logs` collection stores security-related information. This collection does not require nesting under user documents because these logs are designed for admin/monitoring purposes, and access control is managed separately.\n\n**Authorization Independence (CRITICAL):**  The structure leverages path-based ownership for `requests` and `solutions`. This eliminates the need for `get()` calls to parent documents during authorization checks. All necessary information to validate access (e.g., `requesterId` within a request) is available within the document itself. Collaborative scenarios are addressed through `request` ownership by the requester, and this pattern can be extended with membership maps in cases where shared access is needed (if collaborative requests were to be enabled). If group-based access to requests was introduced, the `members` map (as discussed in Access Modeling) would be denormalized into the `/users/{userId}/requests/{requestId}` document to avoid `get()` calls and enable atomic operations.\n\n**Clarity of Intent (Debuggability):** The structure clearly expresses the relationships between users, requests, and solutions through the hierarchical path structure.  Ownership is explicit via `userId` in the paths `/users/{userId}/requests/{requestId}` and `/users/{userId}/requests/{requestId}/solutions/{solutionId}`. The `security_logs` collection stores all security-related data in one place.\n\n**DBAC (No Custom Claims):**  User roles are not covered in the datastructure but would be stored in `/roles_admin/{uid}` or similar collections. Security rules would then rely on `request.auth.uid` and the existence of documents in these role collections.\n\n**QAPs (Rules are not Filters):**  The segregation of `requests` under `/users/{userId}/requests/{requestId}` allows for secure `list` operations.  A user can only list requests that they own, preventing unauthorized access to other users' requests. The segregation principle ensures that a `list` operation only returns documents matching the collection's security profile (e.g., only the current user's requests).\n\n**Invariants:** Ownership is maintained by including the `requesterId` in the `requests` documents, and the timestamp `createdAt` field helps track the creation time of requests. Denormalized data, such as the denormalized membership maps (if collaborative requests were introduced), can be validated using security rules to maintain integrity."
   }
 }
