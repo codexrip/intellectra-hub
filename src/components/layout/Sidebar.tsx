@@ -8,11 +8,10 @@ import {
   FolderKanban,
   Wallet,
   User,
-  Lightbulb,
 } from "lucide-react";
+import Image from "next/image";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const navItems = [
@@ -31,9 +30,9 @@ export function Sidebar() {
       <nav className="flex flex-col items-center gap-4 px-2 py-4">
         <Link
           href="/dashboard"
-          className="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-lg font-semibold text-primary-foreground md:h-8 md:w-8 md:text-base"
+          className="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full text-lg font-semibold text-primary-foreground md:h-8 md:w-8 md:text-base"
         >
-          <Lightbulb className="h-4 w-4 transition-all group-hover:scale-110" />
+          <Image src="/logo.png" alt="Intellectra Hub Logo" width={32} height={32} />
           <span className="sr-only">Intellectra Hub</span>
         </Link>
         <TooltipProvider>
