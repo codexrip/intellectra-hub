@@ -152,14 +152,12 @@ export default function RequestDetailPage() {
             setIsRequestLoading(true);
             
             const requestsCollectionGroup = collectionGroup(firestore, 'requests');
-            const q = query(requestsCollectionGroup, where('__name__', 'like', `%/${requestId}`));
+            const q = query(requestsCollectionGroup, where('id', '==', requestId));
             
             try {
                 const querySnapshot = await getDocs(q);
-
-                const foundDoc = querySnapshot.docs.find(doc => doc.id === requestId);
-
-                if (foundDoc) {
+                if (!querySnapshot.empty) {
+                    const foundDoc = querySnapshot.docs[0];
                     const docData = foundDoc.data() as Omit<Request, 'id'>;
                     setRequest({ ...docData, id: foundDoc.id });
                     setRequestDocRef(foundDoc.ref);
@@ -175,7 +173,30 @@ export default function RequestDetailPage() {
                 setIsRequestLoading(false);
             }
         };
-        findRequest();
+
+        const findRequestDoc = async () => {
+            if (!requestId || !firestore) return;
+            setIsRequestLoading(true);
+
+            const requestsCollection = collectionGroup(firestore, 'requests');
+            const q = query(requestsCollection, where('id', '==', requestId));
+            const querySnapshot = await getDocs(q);
+
+            if (querySnapshot.empty) {
+                toast({ variant: 'destructive', title: 'Error', description: 'Request not found.' });
+                router.push('/marketplace');
+                setIsRequestLoading(false);
+                return;
+            }
+
+            const requestDoc = querySnapshot.docs[0];
+            setRequestDocRef(requestDoc.ref);
+            setRequest({ id: requestDoc.id, ...requestDoc.data() } as Request);
+            setIsRequestLoading(false);
+        }
+        
+        findRequestDoc();
+
     }, [requestId, firestore, router, toast]);
 
     const solutionsQuery = useMemoFirebase(() => {
@@ -264,7 +285,7 @@ export default function RequestDetailPage() {
     const handleDeleteRequest = async () => {
         if (!request || !requestDocRef) return;
         try {
-            deleteDocumentNonBlocking(requestDocRef);
+            await deleteDoc(requestDocRef);
             toast({ title: 'Request Deleted', description: 'Your request has been removed.' });
             router.push('/my-requests');
         } catch (error) {
@@ -373,5 +394,3 @@ export default function RequestDetailPage() {
         </div>
     );
 }
-
-    
