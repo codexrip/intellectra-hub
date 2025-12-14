@@ -33,10 +33,12 @@ import { Button } from '@/components/ui/button';
 import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { collection, addDoc, doc, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, runTransaction, serverTimestamp, Transaction } from 'firebase/firestore';
 import { Request, RequestType, Urgency, UserProfile } from '@/lib/types';
 import { URGENCY_COST, TYPE_COST } from '@/lib/constants';
 import { Coins, Loader2 } from 'lucide-react';
+import { FirestorePermissionError } from '@/firebase/errors';
+import { errorEmitter } from '@/firebase/error-emitter';
 
 const requestTypes: RequestType[] = ['Project Material', 'Collaboration', 'Teaching Material', 'Others'];
 const urgencies: Urgency[] = ['Low', 'Medium', 'High', 'Extreme'];
@@ -47,6 +49,36 @@ const formSchema = z.object({
   type: z.enum(requestTypes as [RequestType, ...RequestType[]]),
   urgency: z.enum(urgencies as [Urgency, ...Urgency[]]),
 });
+
+const runRequestTransaction = (
+  firestore: any,
+  user: any,
+  totalCost: number,
+  values: z.infer<typeof formSchema>
+) => {
+  return runTransaction(firestore, async (transaction: Transaction) => {
+    const userDocRef = doc(firestore, 'users', user.uid);
+    const userDoc = await transaction.get(userDocRef);
+
+    if (!userDoc.exists() || userDoc.data().walletBalance < totalCost) {
+      throw new Error('Insufficient funds.');
+    }
+
+    transaction.update(userDocRef, {
+      walletBalance: userDoc.data().walletBalance - totalCost,
+    });
+
+    const newRequestRef = doc(collection(firestore, 'requests'));
+    const newRequest: Omit<Request, 'id'> = {
+      requesterId: user.uid,
+      ...values,
+      cost: totalCost,
+      status: 'Open',
+      createdAt: serverTimestamp() as any,
+    };
+    transaction.set(newRequestRef, newRequest);
+  });
+};
 
 export default function NewRequestPage() {
   const { user } = useUser();
@@ -79,7 +111,7 @@ export default function NewRequestPage() {
     return typeCost + urgencyCost;
   }, [selectedType, selectedUrgency]);
 
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+  const onSubmit = (values: z.infer<typeof formSchema>) => {
     if (!user || !profile) {
         toast({ variant: 'destructive', title: 'Error', description: 'You must be logged in to create a request.' });
         return;
@@ -92,38 +124,23 @@ export default function NewRequestPage() {
 
     setLoading(true);
 
-    try {
-        await runTransaction(firestore, async (transaction) => {
-            const userDocRef = doc(firestore, 'users', user.uid);
-            
-            const userDoc = await transaction.get(userDocRef);
-            if (!userDoc.exists() || userDoc.data().walletBalance < totalCost) {
-                throw new Error("Insufficient funds.");
-            }
-            
-            transaction.update(userDocRef, {
-                walletBalance: userDoc.data().walletBalance - totalCost
-            });
-            
-            const newRequestRef = doc(collection(firestore, 'requests'));
-            const newRequest: Omit<Request, 'id'> = {
-                requesterId: user.uid,
-                ...values,
-                cost: totalCost,
-                status: 'Open',
-                createdAt: serverTimestamp() as any, // Let server generate timestamp
-            };
-            transaction.set(newRequestRef, newRequest);
-        });
-
+    runRequestTransaction(firestore, user, totalCost, values)
+      .then(() => {
         toast({ title: 'Success!', description: 'Your request has been posted.' });
         router.push('/my-requests');
-    } catch (error) {
+      })
+      .catch((error) => {
         console.error('Error creating request:', error);
-        toast({ variant: 'destructive', title: 'Error', description: 'Failed to create request. Please try again.' });
-    } finally {
+        
+        if (error instanceof FirestorePermissionError) {
+          errorEmitter.emit('permission-error', error);
+        } else {
+           toast({ variant: 'destructive', title: 'Error', description: error.message || 'Failed to create request. Please try again.' });
+        }
+      })
+      .finally(() => {
         setLoading(false);
-    }
+      });
   };
 
   return (

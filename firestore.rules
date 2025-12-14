@@ -55,6 +55,10 @@ service cloud.firestore {
     function isSolutionOwner() {
     	return resource != null && request.auth.uid == resource.data.solverId;
     }
+    
+    function isRequestOwner(requestId) {
+        return request.auth.uid == get(/databases/$(database)/documents/requests/$(requestId)).data.requesterId;
+    }
 
     /**
      * @description Controls access to user profile documents.
@@ -66,46 +70,46 @@ service cloud.firestore {
      * @principle Restricts access to a user's own data tree and prevents user enumeration.
      */
     match /users/{userId} {
-      allow get: if isOwner(userId);
+      allow get: if isSignedIn();
       allow list: if false;
       allow create: if isOwner(userId) && request.resource.data.uid == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.uid == resource.data.uid;
+      allow update: if isOwner(userId) && request.resource.data.uid == resource.data.uid;
       allow delete: if false;
     }
 
     /**
-     * @description Controls access to user-created requests, which are nested under the user's profile.
-     * @path /users/{userId}/requests/{requestId}
-     * @allow (create) An authenticated user creates a new request for themselves. auth.uid: "user_abc", path: /users/user_abc/requests/req_123
-     * @allow (list) A user lists all of their own requests. auth.uid: "user_abc", path: /users/user_abc/requests
+     * @description Controls access to user-created requests, which are in a global collection.
+     * @path /requests/{requestId}
+     * @allow (create) An authenticated user creates a new request for themselves. auth.uid: "user_abc", path: /requests/req_123
+     * @allow (list, get) Any authenticated user can read requests to participate in the marketplace.
      * @deny (get) A user tries to read a request belonging to another user. auth.uid: "user_abc", path: /users/user_xyz/requests/req_456
      * @deny (create) A user tries to create a request under another user's ID. auth.uid: "user_abc", path: /users/user_xyz/requests/req_123
      * @principle Enforces strict document ownership within a user's private subcollection.
      */
-    match /users/{userId}/requests/{requestId} {
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId) && request.resource.data.requesterId == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.requesterId == resource.data.requesterId;
-      allow delete: if isExistingOwner(userId);
+    match /requests/{requestId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.requesterId == request.auth.uid;
+      allow update: if isRequestOwner(requestId);
+      allow delete: if isRequestOwner(requestId);
     }
 
     /**
      * @description Controls access to solutions submitted for a user's request. This is a collaborative collection.
-     * @path /users/{userId}/requests/{requestId}/solutions/{solutionId}
-     * @allow (create) Any signed-in user submits a solution to a request. auth.uid: "solver_789", path: /users/user_abc/requests/req_123/solutions/sol_456
-     * @allow (get) The request owner reads a solution submitted for their request. auth.uid: "user_abc", path: /users/user_abc/requests/req_123/solutions/sol_456
-     * @allow (list) The request owner lists all solutions for their request. auth.uid: "user_abc", path: /users/user_abc/requests/req_123/solutions
-     * @deny (list) A user who submitted a solution tries to list other solutions. auth.uid: "solver_789", path: /users/user_abc/requests/req_123/solutions
-     * @deny (delete) The request owner tries to delete a solution. auth.uid: "user_abc", path: /users/user_abc/requests/req_123/solutions/sol_456
+     * @path /solutions/{solutionId}
+     * @allow (create) Any signed-in user submits a solution to a request. auth.uid: "solver_789", path: /solutions/sol_456
+     * @allow (get) The request owner reads a solution submitted for their request. auth.uid: "user_abc", path: /solutions/sol_456
+     * @allow (list) The request owner lists all solutions for their request. auth.uid: "user_abc", path: /solutions
+     * @deny (list) A user who submitted a solution tries to list other solutions. auth.uid: "solver_789", path: /solutions
+     * @deny (delete) The request owner tries to delete a solution. auth.uid: "user_abc", path: /solutions/sol_456
      * @principle Implements shared access where a resource owner (requester) and contributors (solvers) have different permissions.
      */
-    match /users/{userId}/requests/{requestId}/solutions/{solutionId} {
-      allow get: if isOwner(userId) || isSolutionOwner();
-      allow list: if isOwner(userId);
-      allow create: if isSignedIn() && request.resource.data.solverId == request.auth.uid && request.resource.data.requestId == requestId;
-      allow update: if (isOwner(userId) || isSolutionOwner()) && resource != null && request.resource.data.solverId == resource.data.solverId && request.resource.data.requestId == resource.data.requestId;
-      allow delete: if isSolutionOwner();
+    match /solutions/{solutionId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.solverId == request.auth.uid;
+      allow update: if (isRequestOwner(request.resource.data.requestId) || (isSignedIn() && request.auth.uid == resource.data.solverId));
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.solverId;
     }
     
     /**
@@ -117,11 +121,8 @@ service cloud.firestore {
      * @principle Secures sensitive, admin-only data by prohibiting any and all client access.
      */
     match /security_logs/{logId} {
-      allow get: if false;
-      allow list: if false;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow read: if false;
+      allow write: if false;
     }
   }
 }
