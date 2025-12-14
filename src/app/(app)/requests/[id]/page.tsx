@@ -153,10 +153,9 @@ export default function RequestDetailPage() {
 
             // Use a collection group query to find the request across all users.
             const requestsCollection = collectionGroup(firestore, 'requests');
-            const q = query(requestsCollection, where('id', '==', requestId));
             
             try {
-                const querySnapshot = await getDocs(q);
+                const querySnapshot = await getDocs(requestsCollection);
 
                 if (querySnapshot.empty) {
                     toast({ variant: 'destructive', title: 'Error', description: 'Request not found.' });
@@ -164,7 +163,14 @@ export default function RequestDetailPage() {
                     return;
                 }
 
-                const requestDoc = querySnapshot.docs[0];
+                const requestDoc = querySnapshot.docs.find(doc => doc.id === requestId);
+
+                if (!requestDoc) {
+                    toast({ variant: 'destructive', title: 'Error', description: 'Request not found.' });
+                    router.push('/marketplace');
+                    return;
+                }
+
                 setRequestDocRef(requestDoc.ref);
                 setRequest({ ...requestDoc.data(), id: requestDoc.id } as Request);
             } catch (error) {
