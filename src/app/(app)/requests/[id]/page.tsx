@@ -254,7 +254,7 @@ export default function RequestDetailPage() {
             deleteDocumentNonBlocking(requestDocRef);
             toast({ title: 'Request Deleted', description: 'Your request has been removed.' });
             router.push('/my-requests');
-        } catch (error) -> {
+        } catch (error) {
             toast({ variant: 'destructive', title: 'Error', description: 'Failed to delete request.' });
         }
     };
