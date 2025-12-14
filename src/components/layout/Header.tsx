@@ -53,15 +53,14 @@ export function Header() {
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur-sm md:px-6">
-      <div className="flex-1" />
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-end gap-4 border-b bg-background/80 px-4 backdrop-blur-sm sm:px-6">
+      <div className="flex items-center gap-2 sm:gap-4">
+        <div className="hidden sm:flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground">
           <Coins className="h-5 w-5 text-primary" />
           <span className="font-bold">Coins:</span>
           <AnimatedNumber value={profile.walletBalance} />
         </div>
-        <div className="flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground">
+        <div className="hidden sm:flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground">
           <BarChart className="h-5 w-5 text-primary" />
           <span className="font-bold">Level:</span>
           <AnimatedNumber value={profile.level} />

@@ -35,8 +35,8 @@ export default function DashboardPage() {
         <VerificationBanner user={user} />
         
         <div>
-          <h1 className="text-3xl font-bold font-headline">Welcome back, {profile.displayName}!</h1>
-          <p className="text-muted-foreground mt-1">Here's a quick overview of your Intellectra Hub.</p>
+          <h1 className="text-2xl sm:text-3xl font-bold font-headline">Welcome back, {profile.displayName}!</h1>
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base">Here's a quick overview of your Intellectra Hub.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
