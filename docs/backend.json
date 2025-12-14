@@ -1,0 +1,167 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Represents a user's profile in the system.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Primary Key."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "User's email address."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User's display name."
+        },
+        "photoURL": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL of the user's profile picture."
+        },
+        "walletBalance": {
+          "type": "number",
+          "description": "Defaults to 0."
+        },
+        "xp": {
+          "type": "number",
+          "description": "Experience points (Defaults to 0)."
+        },
+        "level": {
+          "type": "number",
+          "description": "Current Level (Defaults to 1)."
+        },
+        "rating": {
+          "type": "number",
+          "description": "Average feedback score (0-10)."
+        },
+        "isFrozen": {
+          "type": "boolean",
+          "description": "Defaults to false."
+        },
+        "frozenUntil": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Timestamp until which the account is frozen."
+        }
+      },
+      "required": ["uid", "email", "displayName"]
+    },
+    "Request": {
+      "title": "Request",
+      "description": "A request made by a user for some work.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Auto-generated."
+        },
+        "requesterId": {
+          "type": "string",
+          "description": "Link to users.uid."
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "urgency": {
+          "type": "string",
+          "enum": ["Low", "Medium", "High", "Extreme"]
+        },
+        "type": {
+          "type": "string",
+          "enum": ["Project Material", "Collaboration", "Teaching Material", "Others"]
+        },
+        "cost": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Open", "Closed", "Completed"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["requesterId", "title", "description", "urgency", "type", "cost", "status", "createdAt"]
+    },
+    "Solution": {
+      "title": "Solution",
+      "description": "A solution submitted for a request.",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string"
+        },
+        "solverId": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "isAccepted": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["requestId", "solverId", "content", "isAccepted", "createdAt"]
+    },
+    "SecurityLog": {
+        "title": "Security Log",
+        "description": "Logs for security related events.",
+        "type": "object",
+        "properties": {
+            "email": {
+                "type": "string"
+            },
+            "failedAttempts": {
+                "type": "number"
+            },
+            "lastAttemptTime": {
+                "type": "string",
+                "format": "date-time"
+            }
+        },
+        "required": ["email", "failedAttempts", "lastAttemptTime"]
+    }
+  },
+  "auth": {
+    "providers": ["email"]
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Stores user profile information."
+    },
+    "/requests/{requestId}": {
+      "schema": {
+        "$ref": "#/entities/Request"
+      },
+      "description": "Stores user-created requests."
+    },
+    "/solutions/{solutionId}": {
+      "schema": {
+        "$ref": "#/entities/Solution"
+      },
+      "description": "Stores solutions submitted by users for requests."
+    },
+    "/security_logs/{logId}": {
+        "schema": {
+            "$ref": "#/entities/SecurityLog"
+        },
+        "description": "Stores security logs for failed login attempts."
+    }
+  }
+}

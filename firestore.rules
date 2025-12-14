@@ -1,0 +1,42 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // By default, deny all reads and writes
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Allow users to read their own profile
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && request.auth.uid == userId;
+      allow delete: if false;
+    }
+    
+    // Allow any authenticated user to read requests
+    match /requests/{requestId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.requesterId == request.auth.uid;
+      // Only the requester can update the status or delete a request
+      allow update: if request.auth != null && resource.data.requesterId == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.requesterId == request.auth.uid;
+    }
+    
+    // Allow any authenticated user to read solutions
+    // Allow solver to create a solution
+    // Allow requester to update isAccepted field
+    match /solutions/{solutionId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.solverId == request.auth.uid;
+      allow update: if request.auth != null && get(/databases/$(database)/documents/requests/$(resource.data.requestId)).data.requesterId == request.auth.uid;
+    }
+
+    // Security logs can be created by anyone, but not read, updated or deleted
+    match /security_logs/{logId} {
+      allow read, update, delete: if false;
+      allow create: if true;
+    }
+  }
+}
