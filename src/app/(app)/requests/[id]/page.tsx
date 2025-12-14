@@ -418,7 +418,7 @@ export default function RequestDetailPage() {
                 </div>
                 
                 {/* --- Action Zone --- */}
-                <div className="space-y-6">
+                <div className="lg:col-span-1 space-y-6">
                     {renderActionZone()}
                 </div>
             </div>
@@ -474,4 +474,3 @@ export default function RequestDetailPage() {
         </div>
     );
 }
-

@@ -39,7 +39,7 @@ export default function DashboardPage() {
           <p className="text-muted-foreground mt-1">Here's a quick overview of your Intellectra Hub.</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           
           {/* Your Stats Card */}
           <Card className="lg:col-span-1">
@@ -86,7 +86,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* How Leveling Works Card */}
-          <Card className="lg:col-span-1">
+          <Card className="md:col-span-2 lg:col-span-1">
             <CardHeader>
               <CardTitle>How Leveling Works</CardTitle>
             </CardHeader>
